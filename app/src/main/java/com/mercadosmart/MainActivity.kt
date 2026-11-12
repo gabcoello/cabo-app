@@ -14,12 +14,14 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccountBalanceWallet
 import androidx.compose.material.icons.filled.Alarm
+import androidx.compose.material.icons.filled.BarChart
 import androidx.compose.material.icons.filled.FormatListBulleted
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.PriceChange
 import androidx.compose.material.icons.filled.ReceiptLong
 import androidx.compose.material.icons.filled.ShoppingCart
 import androidx.compose.material.icons.outlined.Alarm
+import androidx.compose.material.icons.outlined.BarChart
 import androidx.compose.material.icons.outlined.FormatListBulleted
 import androidx.compose.material.icons.outlined.History
 import androidx.compose.material.icons.outlined.PriceChange
@@ -38,6 +40,7 @@ import com.mercadosmart.ui.components.ExpensesDialog
 import com.mercadosmart.ui.components.PaymentBudgetDialog
 import com.mercadosmart.ui.screens.CompareScreen
 import com.mercadosmart.ui.screens.HistoryScreen
+import com.mercadosmart.ui.screens.MonthlySummaryScreen
 import com.mercadosmart.ui.screens.RemindersScreen
 import com.mercadosmart.ui.screens.ShoppingListScreen
 import com.mercadosmart.ui.theme.Border
@@ -57,6 +60,7 @@ enum class Screen(val title: String, val selectedIcon: ImageVector, val unselect
     LIST("Lista", Icons.Filled.FormatListBulleted, Icons.Outlined.FormatListBulleted),
     HISTORY("Histórico", Icons.Filled.History, Icons.Outlined.History),
     COMPARE("Comparar", Icons.Filled.PriceChange, Icons.Outlined.PriceChange),
+    MONTHLY("Mensal", Icons.Filled.BarChart, Icons.Outlined.BarChart),
     REMINDERS("Lembretes", Icons.Filled.Alarm, Icons.Outlined.Alarm)
 }
 
@@ -240,7 +244,9 @@ class MainActivity : ComponentActivity() {
                                     label = {
                                         Text(
                                             screen.title,
-                                            fontSize = 11.sp,
+                                            fontSize = 10.sp,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis,
                                             fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal
                                         )
                                     },
@@ -274,6 +280,7 @@ class MainActivity : ComponentActivity() {
                                 viewModel = viewModel,
                                 initialSearch = compareInitialSearch
                             )
+                            Screen.MONTHLY -> MonthlySummaryScreen(viewModel = viewModel)
                             Screen.REMINDERS -> RemindersScreen(viewModel = viewModel)
                         }
                     }

@@ -32,23 +32,18 @@ import androidx.compose.ui.unit.sp
 import com.mercadosmart.data.model.ShoppingItem
 import com.mercadosmart.ui.components.FinishPurchaseDialog
 import com.mercadosmart.ui.components.ItemDialog
-import com.mercadosmart.ui.components.MonthlyOverBudgetDialog
-import com.mercadosmart.ui.components.formatMonthShort
 import com.mercadosmart.ui.theme.*
 import com.mercadosmart.viewmodel.MainViewModel
 
 @Composable
 fun ShoppingListScreen(viewModel: MainViewModel) {
     val items by viewModel.shoppingItems.collectAsState()
-    val currentMonthSummary by viewModel.currentMonthSummary.collectAsState()
-    val monthlySummaries by viewModel.monthlySummaries.collectAsState()
     var searchQuery by remember { mutableStateOf("") }
     var selectedCategory by remember { mutableStateOf("Todas") }
 
     var showItemDialog by remember { mutableStateOf(false) }
     var itemToEdit by remember { mutableStateOf<ShoppingItem?>(null) }
     var showFinishDialog by remember { mutableStateOf(false) }
-    var showOverBudgetDialog by remember { mutableStateOf(false) }
 
     // Totais
     val totalPredicted = items.sumOf { it.price * it.quantity }
@@ -110,60 +105,6 @@ fun ShoppingListScreen(viewModel: MainViewModel) {
                             fontSize = 17.sp,
                             fontWeight = FontWeight.ExtraBold,
                             color = PrimaryDark
-                        )
-                    }
-                }
-            }
-
-            // Card Simplificado: Valores Além do Orçamento no Mês
-            currentMonthSummary?.let { summary ->
-                val isOver = summary.overBudgetAmount > 0.0
-                val overFraction = (summary.overBudgetPercent / 100.0).toFloat().coerceIn(0f, 1f)
-                Card(
-                    shape = RoundedCornerShape(14.dp),
-                    colors = CardDefaults.cardColors(containerColor = Surface),
-                    border = androidx.compose.foundation.BorderStroke(1.dp, if (isOver) Danger.copy(alpha = 0.35f) else Border),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 2.dp)
-                        .clickable { showOverBudgetDialog = true }
-                ) {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 14.dp, vertical = 10.dp)
-                    ) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text(
-                                text = "Além do orçamento • ${formatMonthShort(summary.month, summary.year)}",
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.SemiBold,
-                                color = TextSecondary
-                            )
-                            Text(
-                                text = if (isOver) {
-                                    "R$ ${String.format("%.2f", summary.overBudgetAmount)} (+${String.format("%.1f", summary.overBudgetPercent)}%)"
-                                } else {
-                                    "R$ 0,00 (0%)"
-                                },
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.ExtraBold,
-                                color = if (isOver) Danger else PrimaryDark
-                            )
-                        }
-                        Spacer(modifier = Modifier.height(6.dp))
-                        LinearProgressIndicator(
-                            progress = { overFraction },
-                            color = if (isOver) Danger else Primary,
-                            trackColor = if (isOver) DangerLight else PrimaryLight,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(6.dp)
-                                .clip(RoundedCornerShape(3.dp))
                         )
                     }
                 }
@@ -429,14 +370,6 @@ fun ShoppingListScreen(viewModel: MainViewModel) {
                         fallbackPaymentType = fallbackPaymentType
                     )
                 }
-            )
-        }
-
-        if (showOverBudgetDialog && monthlySummaries.isNotEmpty()) {
-            MonthlyOverBudgetDialog(
-                summaries = monthlySummaries,
-                initialMonthKey = currentMonthSummary?.monthKey,
-                onDismiss = { showOverBudgetDialog = false }
             )
         }
     }
