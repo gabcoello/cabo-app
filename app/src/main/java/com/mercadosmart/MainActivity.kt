@@ -118,25 +118,35 @@ class MainActivity : ComponentActivity() {
                                         modifier = Modifier
                                             .size(34.dp)
                                             .clip(RoundedCornerShape(10.dp))
-                                            .background(Primary),
+                                            .background(
+                                                androidx.compose.ui.graphics.Brush.linearGradient(
+                                                    listOf(Primary, PrimaryDark)
+                                                )
+                                            ),
                                         contentAlignment = Alignment.Center
                                     ) {
-                                        Icon(Icons.Default.ShoppingCart, contentDescription = null, tint = Color.White, modifier = Modifier.size(18.dp))
+                                        Text(
+                                            "P",
+                                            fontWeight = FontWeight.Black,
+                                            fontSize = 19.sp,
+                                            color = Color.White
+                                        )
                                     }
 
                                     Spacer(modifier = Modifier.width(8.dp))
 
                                     Column {
                                         Text(
-                                            "MercadoSmart",
+                                            "Plim",
                                             fontWeight = FontWeight.ExtraBold,
-                                            fontSize = 15.sp,
+                                            fontSize = 16.sp,
+                                            letterSpacing = (-0.3).sp,
                                             color = TextPrimary,
                                             maxLines = 1,
                                             overflow = TextOverflow.Ellipsis
                                         )
                                         Text(
-                                            "Compras & Economia",
+                                            "Gastos & Orçamento",
                                             fontSize = 10.sp,
                                             color = TextSecondary,
                                             maxLines = 1,

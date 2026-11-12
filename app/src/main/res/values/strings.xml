@@ -1,5 +1,5 @@
 <resources>
-    <string name="app_name">MercadoSmart</string>
-    <string name="notification_channel_name">Lembretes de Compras</string>
-    <string name="notification_channel_desc">Alertas sonoros para lembretes de compras programados</string>
+    <string name="app_name">Plim</string>
+    <string name="notification_channel_name">Notificações do Plim</string>
+    <string name="notification_channel_desc">Alertas de recarga de saldo e lembretes de gastos do Plim</string>
 </resources>

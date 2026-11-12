@@ -4,14 +4,36 @@
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
-    <group
-        android:scaleX="0.55"
-        android:scaleY="0.55"
-        android:translateX="24.3"
-        android:translateY="24.3">
-        <!-- Ícone estilizado de carrinho de compras moderno em branco -->
+    
+    <!-- Ícone Plim: P geométrico estilizado com barra de progresso e centelha de notificação -->
+    <group>
+        <!-- Haste vertical do P em Verde Esmeralda Plim -->
+        <path
+            android:fillColor="#10B981"
+            android:pathData="M37,36c0,-2.76 2.24,-5 5,-5s5,2.24 5,5v36c0,2.76 -2.24,5 -5,5s-5,-2.24 -5,-5V36z" />
+        
+        <!-- Arco superior do P em Verde Menta Vibrante (simboliza o ciclo de orçamento) -->
+        <path
+            android:fillColor="#34D399"
+            android:pathData="M46,31h13c7.73,0 14,6.27 14,14s-6.27,14 -14,14H46v-9h12c2.76,0 5,-2.24 5,-5s-2.24,-5 -5,-5H46V31z" />
+        
+        <!-- Ponto central de equilíbrio financeiro -->
         <path
             android:fillColor="#FFFFFF"
-            android:pathData="M17.21,9l-4.38,-6.56c-0.19,-0.28,-0.51,-0.42,-0.83,-0.42c-0.32,0,-0.64,0.14,-0.83,0.44L6.79,9H2c-0.55,0,-1,0.45,-1,1c0,0.09,0.01,0.18,0.04,0.27l2.54,9.27c0.23,0.84,1,1.46,1.92,1.46h13c0.92,0,1.69,-0.62,1.93,-1.46l2.54,-9.27c0.02,-0.08,0.03,-0.17,0.03,-0.27c0,-0.55,-0.45,-1,-1,-1H17.21zM9,4.8L11.8,9H6.2L9,4.8zM12,17c-1.1,0,-2,-0.9,-2,-2s0.9,-2,2,-2s2,0.9,2,2S13.1,17,12,17z" />
+            android:pathData="M52,45m-3,0a3,3 0,1 1,6 0a3,3 0,1 1,-6 0" />
+
+        <!-- Centelha "Plim ✨" no canto superior (efeito sonoro / notificação de saldo) -->
+        <!-- Estrela de 4 pontas geométrica em Dourado / Branco Radiante -->
+        <path
+            android:fillColor="#FBBF24"
+            android:pathData="M78,25q0,6 6,6q-6,0 -6,6q0,-6 -6,-6q6,0 6,-6z" />
+        <path
+            android:fillColor="#FFFFFF"
+            android:pathData="M78,27q0,4 4,4q-4,0 -4,4q0,-4 -4,-4q4,0 4,-4z" />
+            
+        <!-- Mini centelha complementar -->
+        <path
+            android:fillColor="#38BDF8"
+            android:pathData="M33,65q0,3 3,3q-3,0 -3,3q0,-3 -3,-3q3,0 3,-3z" />
     </group>
 </vector>
