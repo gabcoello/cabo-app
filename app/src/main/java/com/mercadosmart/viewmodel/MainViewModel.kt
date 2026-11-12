@@ -6,10 +6,13 @@ import androidx.lifecycle.viewModelScope
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 import com.mercadosmart.data.AppDatabase
+import com.mercadosmart.data.model.MethodOverBudgetDetail
+import com.mercadosmart.data.model.MonthlySummary
 import com.mercadosmart.data.model.PaymentBudget
 import com.mercadosmart.data.model.PaymentTypes
 import com.mercadosmart.data.model.PurchaseHistory
 import com.mercadosmart.data.model.PurchaseItem
+import com.mercadosmart.data.model.PurchasePeriodActivity
 import com.mercadosmart.data.model.Reminder
 import com.mercadosmart.data.model.ShoppingItem
 import com.mercadosmart.notification.AlarmScheduler
@@ -21,6 +24,7 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import java.util.Calendar
 
 data class ProductPriceRecord(
     val place: String,
@@ -51,7 +55,25 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val historyDao = db.purchaseHistoryDao()
     private val reminderDao = db.reminderDao()
     private val paymentBudgetDao = db.paymentBudgetDao()
+    private val monthlySummaryDao = db.monthlySummaryDao()
     private val gson = Gson()
+
+    // Resumos mensais armazenados (mês atual aberto + meses anteriores fechados)
+    val monthlySummaries: StateFlow<List<MonthlySummary>> = monthlySummaryDao.getAll()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    val currentMonthSummary: StateFlow<MonthlySummary?> = monthlySummaries
+        .map { list ->
+            val key = currentMonthKey()
+            list.firstOrNull { it.monthKey == key } ?: list.firstOrNull()
+        }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
+
+    init {
+        viewModelScope.launch {
+            syncMonthlySummaries()
+        }
+    }
 
     // Orçamentos / Métodos de pagamento cadastrados
     val paymentBudgets: StateFlow<List<PaymentBudget>> = paymentBudgetDao.getAll()
@@ -218,6 +240,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
             // Deletar itens que foram marcados
             shoppingDao.deleteChecked()
+
+            syncMonthlySummaries()
         }
     }
 
@@ -231,6 +255,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             } else {
                 AlarmScheduler.cancelBudgetRecharge(getApplication(), savedBudget)
             }
+            syncMonthlySummaries(refreshCurrentBudgetsFromActive = true)
         }
     }
 
@@ -238,6 +263,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             AlarmScheduler.cancelBudgetRecharge(getApplication(), budget)
             paymentBudgetDao.delete(budget)
+            syncMonthlySummaries(refreshCurrentBudgetsFromActive = true)
         }
     }
 
@@ -245,7 +271,163 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun deleteHistory(history: PurchaseHistory) {
         viewModelScope.launch {
             historyDao.delete(history)
+            syncMonthlySummaries()
         }
+    }
+
+    private fun currentMonthKey(): String {
+        val cal = Calendar.getInstance()
+        return String.format("%04d-%02d", cal.get(Calendar.YEAR), cal.get(Calendar.MONTH) + 1)
+    }
+
+    private fun monthKeyForTimestamp(timestamp: Long): String {
+        val cal = Calendar.getInstance().apply { timeInMillis = timestamp }
+        return String.format("%04d-%02d", cal.get(Calendar.YEAR), cal.get(Calendar.MONTH) + 1)
+    }
+
+    /**
+     * Abre o resumo do mês atual automaticamente, fecha meses anteriores
+     * e atualiza os cálculos de excesso por meio de pagamento e períodos de maior atividade.
+     */
+    private suspend fun syncMonthlySummaries(refreshCurrentBudgetsFromActive: Boolean = false) {
+        val nowCal = Calendar.getInstance()
+        val curYear = nowCal.get(Calendar.YEAR)
+        val curMonth = nowCal.get(Calendar.MONTH) + 1
+        val curKey = String.format("%04d-%02d", curYear, curMonth)
+
+        val allHistory = historyDao.getAllOnce()
+        val activeBudgets = paymentBudgetDao.getAllOnce()
+        val existingSummaries = monthlySummaryDao.getAllOnce().associateBy { it.monthKey }
+
+        val historyByMonth = allHistory.groupBy { monthKeyForTimestamp(it.date) }
+        val allMonthKeys = (historyByMonth.keys + existingSummaries.keys + curKey).toSortedSet()
+
+        allMonthKeys.forEach { monthKey ->
+            val parts = monthKey.split("-")
+            val year = parts.getOrNull(0)?.toIntOrNull() ?: curYear
+            val month = parts.getOrNull(1)?.toIntOrNull() ?: curMonth
+            val isCurrentMonth = monthKey == curKey
+
+            val existing = existingSummaries[monthKey]
+            val monthPurchases = historyByMonth[monthKey].orEmpty()
+
+            // Se já é um mês passado fechado e não houve alteração no histórico dele, mantém intacto
+            if (!isCurrentMonth && existing != null && existing.isClosed && existing.totalSpent == monthPurchases.sumOf { it.total }) {
+                return@forEach
+            }
+
+            val mapType = object : TypeToken<Map<String, Double>>() {}.type
+            val storedBudgetsMap: Map<String, Double> = try {
+                existing?.methodBudgetsJson?.let { gson.fromJson(it, mapType) } ?: emptyMap()
+            } catch (e: Exception) {
+                emptyMap()
+            }
+
+            val spentByMethod = monthPurchases
+                .groupBy { it.paymentMethod.ifBlank { "Não informado" } }
+                .mapValues { (_, list) -> list.sumOf { it.total } }
+
+            val methodBudgetsMap: Map<String, Double> = when {
+                isCurrentMonth && (existing == null || refreshCurrentBudgetsFromActive) -> {
+                    activeBudgets.associate { budget ->
+                        val name = budget.displayName()
+                        val alreadySpent = spentByMethod[name] ?: 0.0
+                        name to (budget.amount + alreadySpent)
+                    }
+                }
+                storedBudgetsMap.isNotEmpty() -> storedBudgetsMap
+                isCurrentMonth -> activeBudgets.associate { it.displayName() to it.amount }
+                else -> emptyMap()
+            }
+
+            val allMethods = (methodBudgetsMap.keys + spentByMethod.keys).distinct()
+            val methodDetails = allMethods.map { method ->
+                val budgetVal = methodBudgetsMap[method] ?: 0.0
+                val spentVal = spentByMethod[method] ?: 0.0
+                val overVal = (spentVal - budgetVal).coerceAtLeast(0.0)
+                val overPct = when {
+                    overVal <= 0.0 -> 0.0
+                    budgetVal > 0.0 -> (overVal / budgetVal) * 100.0
+                    else -> 100.0
+                }
+                MethodOverBudgetDetail(
+                    methodName = method,
+                    budgetAmount = budgetVal,
+                    spentAmount = spentVal,
+                    overAmount = overVal,
+                    overPercent = overPct
+                )
+            }.sortedByDescending { it.overAmount }
+
+            val totalBudget = methodBudgetsMap.values.sum()
+            val totalSpent = monthPurchases.sumOf { it.total }
+            val overBudgetAmount = (totalSpent - totalBudget).coerceAtLeast(0.0)
+            val overBudgetPercent = when {
+                overBudgetAmount <= 0.0 -> 0.0
+                totalBudget > 0.0 -> (overBudgetAmount / totalBudget) * 100.0
+                else -> 100.0
+            }
+
+            val peakPeriods = computePeakPeriods(monthPurchases)
+
+            monthlySummaryDao.insertOrUpdate(
+                MonthlySummary(
+                    monthKey = monthKey,
+                    year = year,
+                    month = month,
+                    totalBudget = totalBudget,
+                    totalSpent = totalSpent,
+                    overBudgetAmount = overBudgetAmount,
+                    overBudgetPercent = overBudgetPercent,
+                    methodBudgetsJson = gson.toJson(methodBudgetsMap),
+                    methodDetailsJson = gson.toJson(methodDetails),
+                    peakPeriodsJson = gson.toJson(peakPeriods),
+                    isClosed = !isCurrentMonth,
+                    updatedAt = System.currentTimeMillis()
+                )
+            )
+        }
+    }
+
+    private fun computePeakPeriods(purchases: List<PurchaseHistory>): List<PurchasePeriodActivity> {
+        if (purchases.isEmpty()) return emptyList()
+
+        val weekBuckets = linkedMapOf(
+            "1ª Semana (01–07)" to mutableListOf<PurchaseHistory>(),
+            "2ª Semana (08–14)" to mutableListOf<PurchaseHistory>(),
+            "3ª Semana (15–21)" to mutableListOf<PurchaseHistory>(),
+            "4ª Semana (22–31)" to mutableListOf<PurchaseHistory>()
+        )
+
+        purchases.forEach { purchase ->
+            val cal = Calendar.getInstance().apply { timeInMillis = purchase.date }
+            val day = cal.get(Calendar.DAY_OF_MONTH)
+            val bucketKey = when {
+                day <= 7 -> "1ª Semana (01–07)"
+                day <= 14 -> "2ª Semana (08–14)"
+                day <= 21 -> "3ª Semana (15–21)"
+                else -> "4ª Semana (22–31)"
+            }
+            weekBuckets[bucketKey]?.add(purchase)
+        }
+
+        val activeBuckets = weekBuckets.mapNotNull { (label, list) ->
+            if (list.isEmpty()) null else Triple(label, list.size, list.sumOf { it.total })
+        }
+
+        val maxCount = activeBuckets.maxOfOrNull { it.second } ?: 0
+        val maxSpentInTopCount = activeBuckets.filter { it.second == maxCount }.maxOfOrNull { it.third } ?: 0.0
+
+        return activeBuckets
+            .sortedWith(compareByDescending<Triple<String, Int, Double>> { it.second }.thenByDescending { it.third })
+            .map { (label, count, spent) ->
+                PurchasePeriodActivity(
+                    periodLabel = label,
+                    purchaseCount = count,
+                    totalSpent = spent,
+                    isPeak = count == maxCount && spent == maxSpentInTopCount
+                )
+            }
     }
 
     fun repeatPurchase(itemsJson: String) {
