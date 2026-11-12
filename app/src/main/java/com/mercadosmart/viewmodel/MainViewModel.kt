@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 import com.mercadosmart.data.AppDatabase
+import com.mercadosmart.data.model.PaymentBudget
 import com.mercadosmart.data.model.PurchaseHistory
 import com.mercadosmart.data.model.PurchaseItem
 import com.mercadosmart.data.model.Reminder
@@ -16,6 +17,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
@@ -41,7 +43,17 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val shoppingDao = db.shoppingItemDao()
     private val historyDao = db.purchaseHistoryDao()
     private val reminderDao = db.reminderDao()
+    private val paymentBudgetDao = db.paymentBudgetDao()
     private val gson = Gson()
+
+    // Orçamentos / Métodos de pagamento cadastrados
+    val paymentBudgets: StateFlow<List<PaymentBudget>> = paymentBudgetDao.getAll()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    // Somatório total disponível para gastar
+    val totalBudget: StateFlow<Double> = paymentBudgets
+        .map { list -> list.sumOf { it.amount } }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0.0)
 
     // Lista atual de compras
     val shoppingItems: StateFlow<List<ShoppingItem>> = shoppingDao.getAllItems()
@@ -131,8 +143,29 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     // Finalizar Compra
-    fun finishPurchase(place: String, notes: String, currentItems: List<ShoppingItem>, total: Double) {
+    fun finishPurchase(
+        place: String,
+        notes: String,
+        currentItems: List<ShoppingItem>,
+        total: Double,
+        paymentBudgetId: Long? = null
+    ) {
         viewModelScope.launch {
+            var paymentMethodName = ""
+            if (paymentBudgetId != null) {
+                val budget = paymentBudgetDao.getById(paymentBudgetId)
+                if (budget != null) {
+                    paymentMethodName = budget.displayName()
+                    val newAmount = (budget.amount - total).coerceAtLeast(0.0)
+                    paymentBudgetDao.update(
+                        budget.copy(
+                            amount = newAmount,
+                            updatedAt = System.currentTimeMillis()
+                        )
+                    )
+                }
+            }
+
             val purchaseItems = currentItems.map {
                 PurchaseItem(
                     name = it.name,
@@ -146,14 +179,28 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             val history = PurchaseHistory(
                 place = place.trim(),
                 total = total,
+                paymentMethod = paymentMethodName,
                 notes = notes.trim(),
                 itemsJson = gson.toJson(purchaseItems)
             )
 
             historyDao.insert(history)
 
-            // Deletar itens que foram marcados ou todos se todos foram checados
+            // Deletar itens que foram marcados
             shoppingDao.deleteChecked()
+        }
+    }
+
+    // Ações de Orçamento / Métodos de Pagamento
+    fun savePaymentBudget(budget: PaymentBudget) {
+        viewModelScope.launch {
+            paymentBudgetDao.insert(budget.copy(updatedAt = System.currentTimeMillis()))
+        }
+    }
+
+    fun deletePaymentBudget(budget: PaymentBudget) {
+        viewModelScope.launch {
+            paymentBudgetDao.delete(budget)
         }
     }
 

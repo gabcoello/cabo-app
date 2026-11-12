@@ -150,6 +150,14 @@ fun HistoryScreen(
                                         fontSize = 12.sp,
                                         color = TextSecondary
                                     )
+                                    if (item.paymentMethod.isNotBlank()) {
+                                        Text(
+                                            text = "Pago com: ${item.paymentMethod}",
+                                            fontSize = 11.sp,
+                                            fontWeight = FontWeight.SemiBold,
+                                            color = Accent
+                                        )
+                                    }
                                 }
 
                                 Column(horizontalAlignment = Alignment.End) {

@@ -1,0 +1,35 @@
+package com.mercadosmart.data.model
+
+import androidx.room.Entity
+import androidx.room.PrimaryKey
+
+object PaymentTypes {
+    const val TICKET = "Ticket Refeição/Alimentação"
+    const val CREDIT = "Crédito"
+    const val DEBIT = "Débito"
+    const val CASH_PIX = "Dinheiro/Pix"
+
+    val all = listOf(TICKET, CREDIT, DEBIT, CASH_PIX)
+
+    fun shortLabel(type: String): String = when (type) {
+        TICKET -> "Ticket"
+        CREDIT -> "Crédito"
+        DEBIT -> "Débito"
+        CASH_PIX -> "Dinheiro/Pix"
+        else -> type
+    }
+}
+
+@Entity(tableName = "payment_budgets")
+data class PaymentBudget(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val type: String, // Ex: Ticket Refeição/Alimentação, Crédito, Débito, Dinheiro/Pix
+    val label: String = "", // Apelido opcional, ex: "Alelo", "Nubank"
+    val amount: Double = 0.0,
+    val updatedAt: Long = System.currentTimeMillis()
+) {
+    fun displayName(): String {
+        val short = PaymentTypes.shortLabel(type)
+        return if (label.isNotBlank()) "$short • ${label.trim()}" else short
+    }
+}

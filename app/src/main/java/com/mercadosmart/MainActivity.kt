@@ -7,9 +7,12 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AccountBalanceWallet
 import androidx.compose.material.icons.filled.Alarm
 import androidx.compose.material.icons.filled.FormatListBulleted
 import androidx.compose.material.icons.filled.History
@@ -27,8 +30,10 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.mercadosmart.ui.components.PaymentBudgetDialog
 import com.mercadosmart.ui.screens.CompareScreen
 import com.mercadosmart.ui.screens.HistoryScreen
 import com.mercadosmart.ui.screens.RemindersScreen
@@ -37,6 +42,7 @@ import com.mercadosmart.ui.theme.Border
 import com.mercadosmart.ui.theme.MercadoSmartTheme
 import com.mercadosmart.ui.theme.Primary
 import com.mercadosmart.ui.theme.PrimaryDark
+import com.mercadosmart.ui.theme.PrimaryLight
 import com.mercadosmart.ui.theme.Surface
 import com.mercadosmart.ui.theme.TextMuted
 import com.mercadosmart.ui.theme.TextPrimary
@@ -71,10 +77,14 @@ class MainActivity : ComponentActivity() {
             MercadoSmartTheme {
                 var currentScreen by remember { mutableStateOf(Screen.LIST) }
                 var compareInitialSearch by remember { mutableStateOf("") }
+                var showBudgetDialog by remember { mutableStateOf(false) }
+
+                val paymentBudgets by viewModel.paymentBudgets.collectAsState()
+                val totalBudget by viewModel.totalBudget.collectAsState()
 
                 Scaffold(
                     topBar = {
-                        // Header customizado moderno
+                        // Header customizado moderno com somatório de orçamento no canto superior direito
                         Surface(
                             shadowElevation = 1.dp,
                             color = Surface,
@@ -85,23 +95,76 @@ class MainActivity : ComponentActivity() {
                                     .fillMaxWidth()
                                     .statusBarsPadding()
                                     .padding(horizontal = 16.dp, vertical = 10.dp),
-                                verticalAlignment = Alignment.CenterVertically
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
                             ) {
-                                Box(
-                                    modifier = Modifier
-                                        .size(36.dp)
-                                        .clip(RoundedCornerShape(10.dp))
-                                        .background(Primary),
-                                    contentAlignment = Alignment.Center
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    modifier = Modifier.weight(1f).padding(end = 8.dp)
                                 ) {
-                                    Icon(Icons.Default.ShoppingCart, contentDescription = null, tint = Color.White, modifier = Modifier.size(20.dp))
+                                    Box(
+                                        modifier = Modifier
+                                            .size(36.dp)
+                                            .clip(RoundedCornerShape(10.dp))
+                                            .background(Primary),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Icon(Icons.Default.ShoppingCart, contentDescription = null, tint = Color.White, modifier = Modifier.size(20.dp))
+                                    }
+
+                                    Spacer(modifier = Modifier.width(10.dp))
+
+                                    Column {
+                                        Text(
+                                            "MercadoSmart",
+                                            fontWeight = FontWeight.ExtraBold,
+                                            fontSize = 17.sp,
+                                            color = TextPrimary,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+                                        Text(
+                                            "Compras, Economia & Histórico",
+                                            fontSize = 11.sp,
+                                            color = TextSecondary,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+                                    }
                                 }
 
-                                Spacer(modifier = Modifier.width(10.dp))
-
-                                Column {
-                                    Text("MercadoSmart", fontWeight = FontWeight.ExtraBold, fontSize = 17.sp, color = TextPrimary)
-                                    Text("Compras, Economia & Histórico", fontSize = 11.sp, color = TextSecondary)
+                                // Somatório total disponível no canto superior direito (visível em todas as telas)
+                                Row(
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(12.dp))
+                                        .background(PrimaryLight)
+                                        .border(1.dp, Primary.copy(alpha = 0.35f), RoundedCornerShape(12.dp))
+                                        .clickable { showBudgetDialog = true }
+                                        .padding(horizontal = 10.dp, vertical = 6.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(
+                                        Icons.Default.AccountBalanceWallet,
+                                        contentDescription = "Orçamento",
+                                        tint = PrimaryDark,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Column(horizontalAlignment = Alignment.End) {
+                                        Text(
+                                            text = "Disponível",
+                                            fontSize = 9.sp,
+                                            fontWeight = FontWeight.SemiBold,
+                                            color = PrimaryDark
+                                        )
+                                        Text(
+                                            text = "R$ ${String.format("%.2f", totalBudget)}",
+                                            fontSize = 13.sp,
+                                            fontWeight = FontWeight.ExtraBold,
+                                            color = PrimaryDark,
+                                            maxLines = 1
+                                        )
+                                    }
                                 }
                             }
                         }
@@ -165,6 +228,16 @@ class MainActivity : ComponentActivity() {
                             )
                             Screen.REMINDERS -> RemindersScreen(viewModel = viewModel)
                         }
+                    }
+
+                    if (showBudgetDialog) {
+                        PaymentBudgetDialog(
+                            budgets = paymentBudgets,
+                            totalBudget = totalBudget,
+                            onDismiss = { showBudgetDialog = false },
+                            onSaveBudget = { viewModel.savePaymentBudget(it) },
+                            onDeleteBudget = { viewModel.deletePaymentBudget(it) }
+                        )
                     }
                 }
             }

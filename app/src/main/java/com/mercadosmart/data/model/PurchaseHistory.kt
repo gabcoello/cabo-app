@@ -24,6 +24,7 @@ data class PurchaseHistory(
     val date: Long = System.currentTimeMillis(),
     val place: String,
     val total: Double,
+    val paymentMethod: String = "",
     val notes: String = "",
     val itemsJson: String = "[]" // JSON serializado de List<PurchaseItem>
 )

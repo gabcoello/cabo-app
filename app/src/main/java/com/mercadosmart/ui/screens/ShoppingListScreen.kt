@@ -353,12 +353,15 @@ fun ShoppingListScreen(viewModel: MainViewModel) {
         }
 
         if (showFinishDialog) {
+            val paymentBudgets by viewModel.paymentBudgets.collectAsState()
+            val purchaseTotal = if (totalChecked > 0) totalChecked else totalPredicted
             FinishPurchaseDialog(
                 items = items,
-                totalAmount = if (totalChecked > 0) totalChecked else totalPredicted,
+                totalAmount = purchaseTotal,
+                paymentBudgets = paymentBudgets,
                 onDismiss = { showFinishDialog = false },
-                onConfirm = { place, notes ->
-                    viewModel.finishPurchase(place, notes, items, if (totalChecked > 0) totalChecked else totalPredicted)
+                onConfirm = { place, notes, paymentBudgetId ->
+                    viewModel.finishPurchase(place, notes, items, purchaseTotal, paymentBudgetId)
                 }
             )
         }
