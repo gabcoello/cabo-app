@@ -34,7 +34,7 @@ fun FinishPurchaseDialog(
     totalAmount: Double,
     paymentBudgets: List<PaymentBudget>,
     onDismiss: () -> Unit,
-    onConfirm: (place: String, notes: String, paymentBudgetId: Long?, fallbackPaymentType: String?) -> Unit
+    onConfirm: (place: String, notes: String, paymentBudgetId: Long?, fallbackPaymentType: String?, fallbackPaymentLabel: String) -> Unit
 ) {
     var place by remember { mutableStateOf("") }
     var notes by remember { mutableStateOf("") }
@@ -44,6 +44,7 @@ fun FinishPurchaseDialog(
     var selectedFallbackType by remember(paymentBudgets) {
         mutableStateOf<String?>(if (paymentBudgets.isEmpty()) PaymentTypes.DEBIT else null)
     }
+    var fallbackPaymentLabel by remember { mutableStateOf("") }
 
     val recentPlaces = listOf("Atacadão", "Assaí", "Carrefour", "Pão de Açúcar", "Feira Livre", "Mercado Local")
     val checkedCount = items.count { it.isChecked }
@@ -281,6 +282,19 @@ fun FinishPurchaseDialog(
                     }
                 }
 
+                if (selectedBudgetId == null && selectedFallbackType != null) {
+                    Spacer(modifier = Modifier.height(10.dp))
+                    Text("APELIDO DO MEIO NÃO CADASTRADO (OPCIONAL)", style = MaterialTheme.typography.labelSmall)
+                    OutlinedTextField(
+                        value = fallbackPaymentLabel,
+                        onValueChange = { fallbackPaymentLabel = it },
+                        placeholder = { Text("Ex: Cartão extra, Dinheiro, Nubank...", color = TextMuted) },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(12.dp)
+                    )
+                }
+
                 Spacer(modifier = Modifier.height(12.dp))
 
                 // Observações
@@ -300,7 +314,13 @@ fun FinishPurchaseDialog(
                 Button(
                     onClick = {
                         if (place.isNotBlank()) {
-                            onConfirm(place.trim(), notes.trim(), selectedBudgetId, selectedFallbackType)
+                            onConfirm(
+                                place.trim(),
+                                notes.trim(),
+                                selectedBudgetId,
+                                selectedFallbackType,
+                                fallbackPaymentLabel.trim()
+                            )
                             onDismiss()
                         }
                     },

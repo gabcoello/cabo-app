@@ -126,9 +126,18 @@ fun MonthlySummaryScreen(viewModel: MainViewModel) {
             }
         } else {
             val isOver = selectedSummary.overBudgetAmount > 0.0
-            val overFraction = (selectedSummary.overBudgetPercent / 100.0).toFloat().coerceIn(0f, 1f)
+            val usagePercent = if (selectedSummary.totalBudget > 0.0) {
+                (selectedSummary.totalSpent / selectedSummary.totalBudget) * 100.0
+            } else {
+                0.0
+            }
+            val barFraction = if (isOver) {
+                (selectedSummary.overBudgetPercent / 100.0).toFloat().coerceIn(0f, 1f)
+            } else {
+                (usagePercent / 100.0).toFloat().coerceIn(0f, 1f)
+            }
 
-            // Card Simplificado (Total além do orçamento + Barra simples de %)
+            // Card Simplificado (Total gasto no mês + Barra verde até zerar o orçamento, depois reinicia em vermelho)
             Card(
                 shape = RoundedCornerShape(18.dp),
                 colors = CardDefaults.cardColors(containerColor = Surface),
@@ -149,14 +158,14 @@ fun MonthlySummaryScreen(viewModel: MainViewModel) {
                     ) {
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
-                                text = "Além do Orçamento • ${formatMonthShort(selectedSummary.month, selectedSummary.year)}",
+                                text = "Total Gasto • ${formatMonthShort(selectedSummary.month, selectedSummary.year)}",
                                 fontSize = 12.sp,
                                 fontWeight = FontWeight.SemiBold,
                                 color = TextSecondary
                             )
                             Spacer(modifier = Modifier.height(4.dp))
                             Text(
-                                text = "R$ ${String.format("%.2f", selectedSummary.overBudgetAmount)}",
+                                text = "R$ ${String.format("%.2f", selectedSummary.totalSpent)}",
                                 fontSize = 24.sp,
                                 fontWeight = FontWeight.ExtraBold,
                                 color = if (isOver) Danger else PrimaryDark
@@ -171,9 +180,13 @@ fun MonthlySummaryScreen(viewModel: MainViewModel) {
                                     .padding(horizontal = 10.dp, vertical = 5.dp)
                             ) {
                                 Text(
-                                    text = if (isOver) "+${String.format("%.1f", selectedSummary.overBudgetPercent)}%" else "0,0%",
+                                    text = if (isOver) {
+                                        "+${String.format("%.1f", selectedSummary.overBudgetPercent)}% além"
+                                    } else {
+                                        "${String.format("%.1f", usagePercent)}% usado"
+                                    },
                                     fontWeight = FontWeight.ExtraBold,
-                                    fontSize = 14.sp,
+                                    fontSize = 13.sp,
                                     color = if (isOver) Danger else PrimaryDark
                                 )
                             }
@@ -198,7 +211,7 @@ fun MonthlySummaryScreen(viewModel: MainViewModel) {
                     Spacer(modifier = Modifier.height(12.dp))
 
                     LinearProgressIndicator(
-                        progress = { overFraction },
+                        progress = { barFraction },
                         color = if (isOver) Danger else Primary,
                         trackColor = if (isOver) DangerLight else PrimaryLight,
                         modifier = Modifier
@@ -214,15 +227,19 @@ fun MonthlySummaryScreen(viewModel: MainViewModel) {
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
                         Text(
-                            text = "Orçamento do mês: R$ ${String.format("%.2f", selectedSummary.totalBudget)}",
+                            text = "Orçamento: R$ ${String.format("%.2f", selectedSummary.totalBudget)}",
                             fontSize = 12.sp,
                             color = TextSecondary
                         )
                         Text(
-                            text = "Gasto: R$ ${String.format("%.2f", selectedSummary.totalSpent)}",
+                            text = if (isOver) {
+                                "Excedido: R$ ${String.format("%.2f", selectedSummary.overBudgetAmount)}"
+                            } else {
+                                "Restante: R$ ${String.format("%.2f", (selectedSummary.totalBudget - selectedSummary.totalSpent).coerceAtLeast(0.0))}"
+                            },
                             fontSize = 12.sp,
                             fontWeight = FontWeight.SemiBold,
-                            color = TextPrimary
+                            color = if (isOver) Danger else PrimaryDark
                         )
                     }
                 }
@@ -253,7 +270,16 @@ fun MonthlySummaryScreen(viewModel: MainViewModel) {
                         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                             methodDetails.forEach { detail ->
                                 val methodOver = detail.overAmount > 0.0
-                                val methodFraction = (detail.overPercent / 100.0).toFloat().coerceIn(0f, 1f)
+                                val methodUsagePercent = if (detail.budgetAmount > 0.0) {
+                                    (detail.spentAmount / detail.budgetAmount) * 100.0
+                                } else {
+                                    0.0
+                                }
+                                val methodFraction = if (methodOver) {
+                                    (detail.overPercent / 100.0).toFloat().coerceIn(0f, 1f)
+                                } else {
+                                    (methodUsagePercent / 100.0).toFloat().coerceIn(0f, 1f)
+                                }
                                 Card(
                                     shape = RoundedCornerShape(14.dp),
                                     colors = CardDefaults.cardColors(containerColor = Surface),
@@ -277,9 +303,9 @@ fun MonthlySummaryScreen(viewModel: MainViewModel) {
                                             )
                                             Text(
                                                 text = if (methodOver) {
-                                                    "+${String.format("%.1f", detail.overPercent)}% (R$ ${String.format("%.2f", detail.overAmount)})"
+                                                    "+${String.format("%.1f", detail.overPercent)}% além (R$ ${String.format("%.2f", detail.overAmount)})"
                                                 } else {
-                                                    "Dentro (0%)"
+                                                    "${String.format("%.1f", methodUsagePercent)}% usado"
                                                 },
                                                 fontWeight = FontWeight.Bold,
                                                 fontSize = 12.sp,

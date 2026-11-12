@@ -198,7 +198,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         currentItems: List<ShoppingItem>,
         total: Double,
         paymentBudgetId: Long? = null,
-        fallbackPaymentType: String? = null
+        fallbackPaymentType: String? = null,
+        fallbackPaymentLabel: String = ""
     ) {
         viewModelScope.launch {
             var paymentMethodName = ""
@@ -215,7 +216,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     )
                 }
             } else if (!fallbackPaymentType.isNullOrBlank()) {
-                paymentMethodName = PaymentTypes.shortLabel(fallbackPaymentType)
+                val short = PaymentTypes.shortLabel(fallbackPaymentType)
+                paymentMethodName = if (fallbackPaymentLabel.isNotBlank()) {
+                    "$short • ${fallbackPaymentLabel.trim()}"
+                } else {
+                    short
+                }
             }
 
             val purchaseItems = currentItems.map {
