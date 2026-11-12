@@ -360,8 +360,15 @@ fun ShoppingListScreen(viewModel: MainViewModel) {
                 totalAmount = purchaseTotal,
                 paymentBudgets = paymentBudgets,
                 onDismiss = { showFinishDialog = false },
-                onConfirm = { place, notes, paymentBudgetId ->
-                    viewModel.finishPurchase(place, notes, items, purchaseTotal, paymentBudgetId)
+                onConfirm = { place, notes, paymentBudgetId, fallbackPaymentType ->
+                    viewModel.finishPurchase(
+                        place = place,
+                        notes = notes,
+                        currentItems = items,
+                        total = purchaseTotal,
+                        paymentBudgetId = paymentBudgetId,
+                        fallbackPaymentType = fallbackPaymentType
+                    )
                 }
             )
         }

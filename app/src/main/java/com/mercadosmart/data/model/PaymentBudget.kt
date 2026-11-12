@@ -4,15 +4,17 @@ import androidx.room.Entity
 import androidx.room.PrimaryKey
 
 object PaymentTypes {
-    const val TICKET = "Ticket Refeição/Alimentação"
+    const val TICKET_ALIMENTACAO = "Ticket Alimentação"
+    const val TICKET_REFEICAO = "Ticket Refeição"
     const val CREDIT = "Crédito"
     const val DEBIT = "Débito"
     const val CASH_PIX = "Dinheiro/Pix"
 
-    val all = listOf(TICKET, CREDIT, DEBIT, CASH_PIX)
+    val all = listOf(TICKET_ALIMENTACAO, TICKET_REFEICAO, CREDIT, DEBIT, CASH_PIX)
 
     fun shortLabel(type: String): String = when (type) {
-        TICKET -> "Ticket"
+        TICKET_ALIMENTACAO -> "Ticket Alim."
+        TICKET_REFEICAO -> "Ticket Ref."
         CREDIT -> "Crédito"
         DEBIT -> "Débito"
         CASH_PIX -> "Dinheiro/Pix"
@@ -23,7 +25,7 @@ object PaymentTypes {
 @Entity(tableName = "payment_budgets")
 data class PaymentBudget(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
-    val type: String, // Ex: Ticket Refeição/Alimentação, Crédito, Débito, Dinheiro/Pix
+    val type: String, // Ticket Alimentação, Ticket Refeição, Crédito, Débito, Dinheiro/Pix
     val label: String = "", // Apelido opcional, ex: "Alelo", "Nubank"
     val amount: Double = 0.0,
     val updatedAt: Long = System.currentTimeMillis()

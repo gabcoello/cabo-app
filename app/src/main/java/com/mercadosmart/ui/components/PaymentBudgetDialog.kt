@@ -15,6 +15,7 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.CreditCard
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.LocalGroceryStore
 import androidx.compose.material.icons.filled.Payments
 import androidx.compose.material.icons.filled.Restaurant
 import androidx.compose.material3.*
@@ -36,7 +37,8 @@ import com.mercadosmart.data.model.PaymentTypes
 import com.mercadosmart.ui.theme.*
 
 fun iconForPaymentType(type: String): ImageVector = when (type) {
-    PaymentTypes.TICKET -> Icons.Default.Restaurant
+    PaymentTypes.TICKET_ALIMENTACAO -> Icons.Default.LocalGroceryStore
+    PaymentTypes.TICKET_REFEICAO -> Icons.Default.Restaurant
     PaymentTypes.CREDIT -> Icons.Default.CreditCard
     PaymentTypes.DEBIT -> Icons.Default.AccountBalanceWallet
     else -> Icons.Default.Payments
@@ -51,7 +53,7 @@ fun PaymentBudgetDialog(
     onDeleteBudget: (PaymentBudget) -> Unit
 ) {
     var editingBudget by remember { mutableStateOf<PaymentBudget?>(null) }
-    var selectedType by remember { mutableStateOf(PaymentTypes.TICKET) }
+    var selectedType by remember { mutableStateOf(PaymentTypes.TICKET_ALIMENTACAO) }
     var label by remember { mutableStateOf("") }
     var amountText by remember { mutableStateOf("") }
 
@@ -64,7 +66,7 @@ fun PaymentBudgetDialog(
 
     fun resetForm() {
         editingBudget = null
-        selectedType = PaymentTypes.TICKET
+        selectedType = PaymentTypes.TICKET_ALIMENTACAO
         label = ""
         amountText = ""
     }

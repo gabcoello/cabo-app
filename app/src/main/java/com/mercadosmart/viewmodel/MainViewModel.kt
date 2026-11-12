@@ -7,6 +7,7 @@ import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 import com.mercadosmart.data.AppDatabase
 import com.mercadosmart.data.model.PaymentBudget
+import com.mercadosmart.data.model.PaymentTypes
 import com.mercadosmart.data.model.PurchaseHistory
 import com.mercadosmart.data.model.PurchaseItem
 import com.mercadosmart.data.model.Reminder
@@ -37,6 +38,12 @@ data class ProductComparison(
     val records: List<ProductPriceRecord>
 )
 
+data class ExpenseByMethod(
+    val methodName: String,
+    val totalSpent: Double,
+    val purchaseCount: Int
+)
+
 class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     private val db = AppDatabase.getInstance(application)
@@ -61,6 +68,26 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     // Histórico de compras
     val historyList: StateFlow<List<PurchaseHistory>> = historyDao.getAll()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    // Total de gastos acumulados (todas as compras feitas)
+    val totalExpenses: StateFlow<Double> = historyList
+        .map { list -> list.sumOf { it.total } }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0.0)
+
+    // Gastos detalhados por meio de pagamento
+    val expensesByMethod: StateFlow<List<ExpenseByMethod>> = historyList
+        .map { list ->
+            list.groupBy { purchase ->
+                purchase.paymentMethod.ifBlank { "Não informado" }
+            }.map { (method, purchases) ->
+                ExpenseByMethod(
+                    methodName = method,
+                    totalSpent = purchases.sumOf { it.total },
+                    purchaseCount = purchases.size
+                )
+            }.sortedByDescending { it.totalSpent }
+        }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     // Lembretes
@@ -148,7 +175,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         notes: String,
         currentItems: List<ShoppingItem>,
         total: Double,
-        paymentBudgetId: Long? = null
+        paymentBudgetId: Long? = null,
+        fallbackPaymentType: String? = null
     ) {
         viewModelScope.launch {
             var paymentMethodName = ""
@@ -164,6 +192,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                         )
                     )
                 }
+            } else if (!fallbackPaymentType.isNullOrBlank()) {
+                paymentMethodName = PaymentTypes.shortLabel(fallbackPaymentType)
             }
 
             val purchaseItems = currentItems.map {

@@ -24,6 +24,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import com.mercadosmart.data.model.PaymentBudget
+import com.mercadosmart.data.model.PaymentTypes
 import com.mercadosmart.data.model.ShoppingItem
 import com.mercadosmart.ui.theme.*
 
@@ -33,12 +34,15 @@ fun FinishPurchaseDialog(
     totalAmount: Double,
     paymentBudgets: List<PaymentBudget>,
     onDismiss: () -> Unit,
-    onConfirm: (place: String, notes: String, paymentBudgetId: Long?) -> Unit
+    onConfirm: (place: String, notes: String, paymentBudgetId: Long?, fallbackPaymentType: String?) -> Unit
 ) {
     var place by remember { mutableStateOf("") }
     var notes by remember { mutableStateOf("") }
     var selectedBudgetId by remember(paymentBudgets) {
         mutableStateOf(paymentBudgets.firstOrNull()?.id)
+    }
+    var selectedFallbackType by remember(paymentBudgets) {
+        mutableStateOf<String?>(if (paymentBudgets.isEmpty()) PaymentTypes.DEBIT else null)
     }
 
     val recentPlaces = listOf("Atacadão", "Assaí", "Carrefour", "Pão de Açúcar", "Feira Livre", "Mercado Local")
@@ -153,25 +157,11 @@ fun FinishPurchaseDialog(
                 Text("PAGO COM", style = MaterialTheme.typography.labelSmall)
                 Spacer(modifier = Modifier.height(6.dp))
 
-                if (paymentBudgets.isEmpty()) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clip(RoundedCornerShape(12.dp))
-                            .background(Background)
-                            .border(1.dp, Border, RoundedCornerShape(12.dp))
-                            .padding(12.dp)
-                    ) {
-                        Text(
-                            text = "Nenhum método de pagamento cadastrado. Você pode cadastrar valores tocando no saldo no canto superior.",
-                            fontSize = 12.sp,
-                            color = TextSecondary
-                        )
-                    }
-                } else {
+                if (paymentBudgets.isNotEmpty()) {
                     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                         paymentBudgets.forEach { budget ->
                             val isSelected = selectedBudgetId == budget.id
+                            val isZeroed = budget.amount <= 0.0
                             val remaining = (budget.amount - totalAmount).coerceAtLeast(0.0)
                             Row(
                                 modifier = Modifier
@@ -184,7 +174,12 @@ fun FinishPurchaseDialog(
                                         shape = RoundedCornerShape(12.dp)
                                     )
                                     .clickable {
-                                        selectedBudgetId = if (isSelected) null else budget.id
+                                        if (isSelected) {
+                                            selectedBudgetId = null
+                                        } else {
+                                            selectedBudgetId = budget.id
+                                            selectedFallbackType = null
+                                        }
                                     }
                                     .padding(horizontal = 12.dp, vertical = 10.dp),
                                 verticalAlignment = Alignment.CenterVertically
@@ -206,10 +201,10 @@ fun FinishPurchaseDialog(
                                         overflow = TextOverflow.Ellipsis
                                     )
                                     Text(
-                                        text = if (isSelected) {
-                                            "R$ ${String.format("%.2f", budget.amount)} → R$ ${String.format("%.2f", remaining)}"
-                                        } else {
-                                            "Disponível: R$ ${String.format("%.2f", budget.amount)}"
+                                        text = when {
+                                            isZeroed -> "Saldo zerado • será adicionado aos gastos"
+                                            isSelected -> "R$ ${String.format("%.2f", budget.amount)} → R$ ${String.format("%.2f", remaining)}"
+                                            else -> "Disponível: R$ ${String.format("%.2f", budget.amount)}"
                                         },
                                         fontSize = 11.sp,
                                         color = if (isSelected) PrimaryDark else TextSecondary
@@ -227,13 +222,62 @@ fun FinishPurchaseDialog(
                         }
                     }
 
-                    if (selectedBudget != null && totalAmount > selectedBudget.amount) {
+                    if (selectedBudget != null && selectedBudget.amount > 0.0 && totalAmount > selectedBudget.amount) {
                         Spacer(modifier = Modifier.height(6.dp))
                         Text(
-                            text = "Atenção: o total da compra supera o saldo de ${selectedBudget.displayName()}. O saldo será zerado.",
+                            text = "O total supera o saldo de ${selectedBudget.displayName()}. O saldo será zerado e o valor completo irá para os gastos.",
                             fontSize = 11.sp,
                             color = Warning
                         )
+                    }
+
+                    Spacer(modifier = Modifier.height(10.dp))
+                    Text("OU ESCOLHA OUTRO MEIO (SEM ORÇAMENTO)", style = MaterialTheme.typography.labelSmall)
+                    Spacer(modifier = Modifier.height(6.dp))
+                } else {
+                    Text(
+                        text = "Selecione o meio de pagamento (será registrado na área de gastos):",
+                        fontSize = 12.sp,
+                        color = TextSecondary,
+                        modifier = Modifier.padding(bottom = 6.dp)
+                    )
+                }
+
+                // Meios de pagamento padrão (para quando orçamento estiver zerado ou não cadastrado)
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    PaymentTypes.all.forEach { type ->
+                        val isSelected = selectedBudgetId == null && selectedFallbackType == type
+                        Row(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(16.dp))
+                                .background(if (isSelected) Accent else TagBg)
+                                .border(1.dp, if (isSelected) Accent else Border, RoundedCornerShape(16.dp))
+                                .clickable {
+                                    selectedBudgetId = null
+                                    selectedFallbackType = if (isSelected) null else type
+                                }
+                                .padding(horizontal = 10.dp, vertical = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                iconForPaymentType(type),
+                                contentDescription = null,
+                                tint = if (isSelected) Color.White else TextSecondary,
+                                modifier = Modifier.size(14.dp)
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(
+                                text = PaymentTypes.shortLabel(type),
+                                fontSize = 11.sp,
+                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                                color = if (isSelected) Color.White else TextSecondary
+                            )
+                        }
                     }
                 }
 
@@ -256,7 +300,7 @@ fun FinishPurchaseDialog(
                 Button(
                     onClick = {
                         if (place.isNotBlank()) {
-                            onConfirm(place.trim(), notes.trim(), selectedBudgetId)
+                            onConfirm(place.trim(), notes.trim(), selectedBudgetId, selectedFallbackType)
                             onDismiss()
                         }
                     },

@@ -17,6 +17,7 @@ import androidx.compose.material.icons.filled.Alarm
 import androidx.compose.material.icons.filled.FormatListBulleted
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.PriceChange
+import androidx.compose.material.icons.filled.ReceiptLong
 import androidx.compose.material.icons.filled.ShoppingCart
 import androidx.compose.material.icons.outlined.Alarm
 import androidx.compose.material.icons.outlined.FormatListBulleted
@@ -33,12 +34,15 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.mercadosmart.ui.components.ExpensesDialog
 import com.mercadosmart.ui.components.PaymentBudgetDialog
 import com.mercadosmart.ui.screens.CompareScreen
 import com.mercadosmart.ui.screens.HistoryScreen
 import com.mercadosmart.ui.screens.RemindersScreen
 import com.mercadosmart.ui.screens.ShoppingListScreen
 import com.mercadosmart.ui.theme.Border
+import com.mercadosmart.ui.theme.Danger
+import com.mercadosmart.ui.theme.DangerLight
 import com.mercadosmart.ui.theme.MercadoSmartTheme
 import com.mercadosmart.ui.theme.Primary
 import com.mercadosmart.ui.theme.PrimaryDark
@@ -78,13 +82,17 @@ class MainActivity : ComponentActivity() {
                 var currentScreen by remember { mutableStateOf(Screen.LIST) }
                 var compareInitialSearch by remember { mutableStateOf("") }
                 var showBudgetDialog by remember { mutableStateOf(false) }
+                var showExpensesDialog by remember { mutableStateOf(false) }
 
                 val paymentBudgets by viewModel.paymentBudgets.collectAsState()
                 val totalBudget by viewModel.totalBudget.collectAsState()
+                val totalExpenses by viewModel.totalExpenses.collectAsState()
+                val expensesByMethod by viewModel.expensesByMethod.collectAsState()
+                val historyList by viewModel.historyList.collectAsState()
 
                 Scaffold(
                     topBar = {
-                        // Header customizado moderno com somatório de orçamento no canto superior direito
+                        // Header customizado moderno com miniaturas de Orçamento e Gastos no canto superior direito
                         Surface(
                             shadowElevation = 1.dp,
                             color = Surface,
@@ -94,38 +102,38 @@ class MainActivity : ComponentActivity() {
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .statusBarsPadding()
-                                    .padding(horizontal = 16.dp, vertical = 10.dp),
+                                    .padding(horizontal = 12.dp, vertical = 10.dp),
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.SpaceBetween
                             ) {
                                 Row(
                                     verticalAlignment = Alignment.CenterVertically,
-                                    modifier = Modifier.weight(1f).padding(end = 8.dp)
+                                    modifier = Modifier.weight(1f).padding(end = 6.dp)
                                 ) {
                                     Box(
                                         modifier = Modifier
-                                            .size(36.dp)
+                                            .size(34.dp)
                                             .clip(RoundedCornerShape(10.dp))
                                             .background(Primary),
                                         contentAlignment = Alignment.Center
                                     ) {
-                                        Icon(Icons.Default.ShoppingCart, contentDescription = null, tint = Color.White, modifier = Modifier.size(20.dp))
+                                        Icon(Icons.Default.ShoppingCart, contentDescription = null, tint = Color.White, modifier = Modifier.size(18.dp))
                                     }
 
-                                    Spacer(modifier = Modifier.width(10.dp))
+                                    Spacer(modifier = Modifier.width(8.dp))
 
                                     Column {
                                         Text(
                                             "MercadoSmart",
                                             fontWeight = FontWeight.ExtraBold,
-                                            fontSize = 17.sp,
+                                            fontSize = 15.sp,
                                             color = TextPrimary,
                                             maxLines = 1,
                                             overflow = TextOverflow.Ellipsis
                                         )
                                         Text(
-                                            "Compras, Economia & Histórico",
-                                            fontSize = 11.sp,
+                                            "Compras & Economia",
+                                            fontSize = 10.sp,
                                             color = TextSecondary,
                                             maxLines = 1,
                                             overflow = TextOverflow.Ellipsis
@@ -133,37 +141,77 @@ class MainActivity : ComponentActivity() {
                                     }
                                 }
 
-                                // Somatório total disponível no canto superior direito (visível em todas as telas)
+                                // Miniaturas: Gastos e Disponível (visíveis em todas as telas)
                                 Row(
-                                    modifier = Modifier
-                                        .clip(RoundedCornerShape(12.dp))
-                                        .background(PrimaryLight)
-                                        .border(1.dp, Primary.copy(alpha = 0.35f), RoundedCornerShape(12.dp))
-                                        .clickable { showBudgetDialog = true }
-                                        .padding(horizontal = 10.dp, vertical = 6.dp),
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp),
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
-                                    Icon(
-                                        Icons.Default.AccountBalanceWallet,
-                                        contentDescription = "Orçamento",
-                                        tint = PrimaryDark,
-                                        modifier = Modifier.size(16.dp)
-                                    )
-                                    Spacer(modifier = Modifier.width(6.dp))
-                                    Column(horizontalAlignment = Alignment.End) {
-                                        Text(
-                                            text = "Disponível",
-                                            fontSize = 9.sp,
-                                            fontWeight = FontWeight.SemiBold,
-                                            color = PrimaryDark
+                                    // Miniatura Gastos
+                                    Row(
+                                        modifier = Modifier
+                                            .clip(RoundedCornerShape(10.dp))
+                                            .background(DangerLight)
+                                            .border(1.dp, Danger.copy(alpha = 0.25f), RoundedCornerShape(10.dp))
+                                            .clickable { showExpensesDialog = true }
+                                            .padding(horizontal = 8.dp, vertical = 5.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Icon(
+                                            Icons.Default.ReceiptLong,
+                                            contentDescription = "Gastos",
+                                            tint = Danger,
+                                            modifier = Modifier.size(14.dp)
                                         )
-                                        Text(
-                                            text = "R$ ${String.format("%.2f", totalBudget)}",
-                                            fontSize = 13.sp,
-                                            fontWeight = FontWeight.ExtraBold,
-                                            color = PrimaryDark,
-                                            maxLines = 1
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                        Column(horizontalAlignment = Alignment.End) {
+                                            Text(
+                                                text = "Gastos",
+                                                fontSize = 9.sp,
+                                                fontWeight = FontWeight.SemiBold,
+                                                color = Danger
+                                            )
+                                            Text(
+                                                text = "R$ ${String.format("%.2f", totalExpenses)}",
+                                                fontSize = 11.sp,
+                                                fontWeight = FontWeight.ExtraBold,
+                                                color = Danger,
+                                                maxLines = 1
+                                            )
+                                        }
+                                    }
+
+                                    // Miniatura Disponível
+                                    Row(
+                                        modifier = Modifier
+                                            .clip(RoundedCornerShape(10.dp))
+                                            .background(PrimaryLight)
+                                            .border(1.dp, Primary.copy(alpha = 0.35f), RoundedCornerShape(10.dp))
+                                            .clickable { showBudgetDialog = true }
+                                            .padding(horizontal = 8.dp, vertical = 5.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Icon(
+                                            Icons.Default.AccountBalanceWallet,
+                                            contentDescription = "Orçamento",
+                                            tint = PrimaryDark,
+                                            modifier = Modifier.size(14.dp)
                                         )
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                        Column(horizontalAlignment = Alignment.End) {
+                                            Text(
+                                                text = "Disponível",
+                                                fontSize = 9.sp,
+                                                fontWeight = FontWeight.SemiBold,
+                                                color = PrimaryDark
+                                            )
+                                            Text(
+                                                text = "R$ ${String.format("%.2f", totalBudget)}",
+                                                fontSize = 11.sp,
+                                                fontWeight = FontWeight.ExtraBold,
+                                                color = PrimaryDark,
+                                                maxLines = 1
+                                            )
+                                        }
                                     }
                                 }
                             }
@@ -237,6 +285,15 @@ class MainActivity : ComponentActivity() {
                             onDismiss = { showBudgetDialog = false },
                             onSaveBudget = { viewModel.savePaymentBudget(it) },
                             onDeleteBudget = { viewModel.deletePaymentBudget(it) }
+                        )
+                    }
+
+                    if (showExpensesDialog) {
+                        ExpensesDialog(
+                            totalExpenses = totalExpenses,
+                            expensesByMethod = expensesByMethod,
+                            historyList = historyList,
+                            onDismiss = { showExpensesDialog = false }
                         )
                     }
                 }
