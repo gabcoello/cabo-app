@@ -23,6 +23,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.google.gson.Gson
@@ -32,6 +33,58 @@ import com.mercadosmart.data.model.PurchasePeriodActivity
 import com.mercadosmart.ui.components.formatMonthShort
 import com.mercadosmart.ui.theme.*
 import com.mercadosmart.viewmodel.MainViewModel
+
+/**
+ * Barra segmentada: enche em verde até o limite do orçamento
+ * e a partir daí o valor excedente enche em vermelho logo em seguida.
+ */
+@Composable
+private fun BudgetSegmentedBar(
+    budget: Double,
+    spent: Double,
+    height: Dp = 10.dp,
+    modifier: Modifier = Modifier
+) {
+    val totalScale = maxOf(budget, spent)
+    val greenFraction = when {
+        totalScale <= 0.0 -> 0f
+        spent <= budget -> (spent / totalScale).toFloat().coerceIn(0f, 1f)
+        else -> (budget / totalScale).toFloat().coerceIn(0f, 1f)
+    }
+    val redFraction = when {
+        totalScale <= 0.0 || spent <= budget -> 0f
+        else -> ((spent - budget) / totalScale).toFloat().coerceIn(0f, 1f)
+    }
+
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .height(height)
+            .clip(RoundedCornerShape(height / 2))
+            .background(PrimaryLight)
+    ) {
+        if (greenFraction > 0f) {
+            Box(
+                modifier = Modifier
+                    .fillMaxHeight()
+                    .weight(greenFraction)
+                    .background(Primary)
+            )
+        }
+        if (redFraction > 0f) {
+            Box(
+                modifier = Modifier
+                    .fillMaxHeight()
+                    .weight(redFraction)
+                    .background(Danger)
+            )
+        }
+        val remainingFraction = (1f - greenFraction - redFraction).coerceAtLeast(0f)
+        if (remainingFraction > 0.001f) {
+            Spacer(modifier = Modifier.weight(remainingFraction))
+        }
+    }
+}
 
 @Composable
 fun MonthlySummaryScreen(viewModel: MainViewModel) {
@@ -210,14 +263,10 @@ fun MonthlySummaryScreen(viewModel: MainViewModel) {
 
                     Spacer(modifier = Modifier.height(12.dp))
 
-                    LinearProgressIndicator(
-                        progress = { barFraction },
-                        color = if (isOver) Danger else Primary,
-                        trackColor = if (isOver) DangerLight else PrimaryLight,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(10.dp)
-                            .clip(RoundedCornerShape(5.dp))
+                    BudgetSegmentedBar(
+                        budget = selectedSummary.totalBudget,
+                        spent = selectedSummary.totalSpent,
+                        height = 10.dp
                     )
 
                     Spacer(modifier = Modifier.height(8.dp))
@@ -315,14 +364,10 @@ fun MonthlySummaryScreen(viewModel: MainViewModel) {
 
                                         Spacer(modifier = Modifier.height(8.dp))
 
-                                        LinearProgressIndicator(
-                                            progress = { methodFraction },
-                                            color = if (methodOver) Danger else Primary,
-                                            trackColor = if (methodOver) DangerLight else PrimaryLight,
-                                            modifier = Modifier
-                                                .fillMaxWidth()
-                                                .height(7.dp)
-                                                .clip(RoundedCornerShape(4.dp))
+                                        BudgetSegmentedBar(
+                                            budget = detail.budgetAmount,
+                                            spent = detail.spentAmount,
+                                            height = 7.dp
                                         )
 
                                         Spacer(modifier = Modifier.height(6.dp))
