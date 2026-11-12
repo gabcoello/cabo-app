@@ -1,0 +1,5 @@
+<resources>
+    <string name="app_name">MercadoSmart</string>
+    <string name="notification_channel_name">Lembretes de Compras</string>
+    <string name="notification_channel_desc">Alertas sonoros para lembretes de compras programados</string>
+</resources>

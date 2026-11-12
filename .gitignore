@@ -1,0 +1,28 @@
+# Gradle / Android build
+*.apk
+*.ap_
+*.aab
+*.dex
+*.class
+bin/
+gen/
+out/
+build/
+.gradle/
+.kotlin/
+
+# Local configuration (SDK paths, etc.)
+local.properties
+
+# Android Studio / IntelliJ IDEA
+.idea/
+*.iml
+*.ipr
+*.iws
+.navigation/
+captures/
+
+# OS / Misc
+.DS_Store
+Thumbs.db
+*.log

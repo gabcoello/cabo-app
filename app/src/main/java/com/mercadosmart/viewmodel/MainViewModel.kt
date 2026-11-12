@@ -1,0 +1,228 @@
+package com.mercadosmart.viewmodel
+
+import android.app.Application
+import androidx.lifecycle.AndroidViewModel
+import androidx.lifecycle.viewModelScope
+import com.google.gson.Gson
+import com.google.gson.reflect.TypeToken
+import com.mercadosmart.data.AppDatabase
+import com.mercadosmart.data.model.PurchaseHistory
+import com.mercadosmart.data.model.PurchaseItem
+import com.mercadosmart.data.model.Reminder
+import com.mercadosmart.data.model.ShoppingItem
+import com.mercadosmart.notification.AlarmScheduler
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.launch
+
+data class ProductPriceRecord(
+    val place: String,
+    val date: Long,
+    val price: Double,
+    val unit: String
+)
+
+data class ProductComparison(
+    val name: String,
+    val minPrice: Double,
+    val bestPlace: String,
+    val allPricesEqual: Boolean,
+    val totalRecords: Int,
+    val records: List<ProductPriceRecord>
+)
+
+class MainViewModel(application: Application) : AndroidViewModel(application) {
+
+    private val db = AppDatabase.getInstance(application)
+    private val shoppingDao = db.shoppingItemDao()
+    private val historyDao = db.purchaseHistoryDao()
+    private val reminderDao = db.reminderDao()
+    private val gson = Gson()
+
+    // Lista atual de compras
+    val shoppingItems: StateFlow<List<ShoppingItem>> = shoppingDao.getAllItems()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    // Histórico de compras
+    val historyList: StateFlow<List<PurchaseHistory>> = historyDao.getAll()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    // Lembretes
+    val reminders: StateFlow<List<Reminder>> = reminderDao.getAll()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    // Comparador de Preços (calculado a partir do histórico)
+    val priceComparisons: StateFlow<List<ProductComparison>> = historyList.combine(MutableStateFlow("")) { history, _ ->
+        val map = mutableMapOf<String, MutableList<ProductPriceRecord>>()
+
+        history.forEach { purchase ->
+            val type = object : TypeToken<List<PurchaseItem>>() {}.type
+            val items: List<PurchaseItem> = try {
+                gson.fromJson(purchase.itemsJson, type) ?: emptyList()
+            } catch (e: Exception) {
+                emptyList()
+            }
+
+            items.forEach { item ->
+                val key = item.name.trim().lowercase()
+                val list = map.getOrPut(key) { mutableListOf() }
+                list.add(
+                    ProductPriceRecord(
+                        place = purchase.place,
+                        date = purchase.date,
+                        price = item.price,
+                        unit = item.unit
+                    )
+                )
+            }
+        }
+
+        map.map { (key, records) ->
+            val sorted = records.sortedByDescending { it.date }
+            val validPrices = sorted.filter { it.price > 0 }
+            val minPrice = if (validPrices.isNotEmpty()) validPrices.minOf { it.price } else 0.0
+            val bestPlace = validPrices.firstOrNull { it.price == minPrice }?.place ?: "-"
+            val allPricesEqual = validPrices.size > 1 && validPrices.map { it.price }.distinct().size == 1
+
+            ProductComparison(
+                name = sorted.firstOrNull()?.let { records.first().place; key.replaceFirstChar { it.uppercase() } } ?: key,
+                minPrice = minPrice,
+                bestPlace = bestPlace,
+                allPricesEqual = allPricesEqual,
+                totalRecords = sorted.size,
+                records = sorted
+            )
+        }.sortedByDescending { it.totalRecords }
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    // Ações de itens
+    fun addItem(item: ShoppingItem) {
+        viewModelScope.launch {
+            shoppingDao.insert(item)
+        }
+    }
+
+    fun updateItem(item: ShoppingItem) {
+        viewModelScope.launch {
+            shoppingDao.update(item)
+        }
+    }
+
+    fun toggleItemCheck(item: ShoppingItem) {
+        viewModelScope.launch {
+            shoppingDao.update(item.copy(isChecked = !item.isChecked))
+        }
+    }
+
+    fun deleteItem(item: ShoppingItem) {
+        viewModelScope.launch {
+            shoppingDao.delete(item)
+        }
+    }
+
+    fun clearAllItems() {
+        viewModelScope.launch {
+            shoppingDao.deleteAll()
+        }
+    }
+
+    // Finalizar Compra
+    fun finishPurchase(place: String, notes: String, currentItems: List<ShoppingItem>, total: Double) {
+        viewModelScope.launch {
+            val purchaseItems = currentItems.map {
+                PurchaseItem(
+                    name = it.name,
+                    quantity = it.quantity,
+                    unit = it.unit,
+                    price = it.price,
+                    category = it.category
+                )
+            }
+
+            val history = PurchaseHistory(
+                place = place.trim(),
+                total = total,
+                notes = notes.trim(),
+                itemsJson = gson.toJson(purchaseItems)
+            )
+
+            historyDao.insert(history)
+
+            // Deletar itens que foram marcados ou todos se todos foram checados
+            shoppingDao.deleteChecked()
+        }
+    }
+
+    // Ações de Histórico
+    fun deleteHistory(history: PurchaseHistory) {
+        viewModelScope.launch {
+            historyDao.delete(history)
+        }
+    }
+
+    fun repeatPurchase(itemsJson: String) {
+        viewModelScope.launch {
+            val type = object : TypeToken<List<PurchaseItem>>() {}.type
+            val items: List<PurchaseItem> = try {
+                gson.fromJson(itemsJson, type) ?: emptyList()
+            } catch (e: Exception) {
+                emptyList()
+            }
+
+            val shoppingItems = items.map {
+                ShoppingItem(
+                    name = it.name,
+                    quantity = it.quantity,
+                    unit = it.unit,
+                    price = it.price,
+                    category = it.category,
+                    isChecked = false
+                )
+            }
+            shoppingDao.insertAll(shoppingItems)
+        }
+    }
+
+    // Ações de Lembrete
+    fun addReminder(reminder: Reminder) {
+        viewModelScope.launch {
+            val id = reminderDao.insert(reminder)
+            val savedReminder = reminder.copy(id = id)
+            if (savedReminder.isActive) {
+                AlarmScheduler.scheduleReminder(getApplication(), savedReminder)
+            }
+        }
+    }
+
+    fun toggleReminder(reminder: Reminder) {
+        viewModelScope.launch {
+            val newActive = !reminder.isActive
+            val updated = reminder.copy(isActive = newActive)
+            reminderDao.update(updated)
+
+            if (newActive) {
+                AlarmScheduler.scheduleReminder(getApplication(), updated)
+            } else {
+                AlarmScheduler.cancelReminder(getApplication(), updated)
+            }
+        }
+    }
+
+    fun deleteReminder(reminder: Reminder) {
+        viewModelScope.launch {
+            AlarmScheduler.cancelReminder(getApplication(), reminder)
+            reminderDao.delete(reminder)
+        }
+    }
+
+    // Buscar histórico de preço de um item específico
+    fun getLatestPriceFor(name: String): ProductPriceRecord? {
+        val cleanName = name.trim().lowercase()
+        val match = priceComparisons.value.firstOrNull { it.name.lowercase() == cleanName }
+        return match?.records?.firstOrNull { it.price > 0 }
+    }
+}
