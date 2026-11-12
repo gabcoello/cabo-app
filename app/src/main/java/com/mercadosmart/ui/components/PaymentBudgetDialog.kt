@@ -1,5 +1,9 @@
 package com.mercadosmart.ui.components
 
+import android.Manifest
+import android.os.Build
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -15,6 +19,7 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.CreditCard
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.EventRepeat
 import androidx.compose.material.icons.filled.LocalGroceryStore
 import androidx.compose.material.icons.filled.Payments
 import androidx.compose.material.icons.filled.Restaurant
@@ -56,12 +61,27 @@ fun PaymentBudgetDialog(
     var selectedType by remember { mutableStateOf(PaymentTypes.TICKET_ALIMENTACAO) }
     var label by remember { mutableStateOf("") }
     var amountText by remember { mutableStateOf("") }
+    var enableRecharge by remember { mutableStateOf(false) }
+    var rechargeDayText by remember { mutableStateOf("") }
+    var rechargeAmountText by remember { mutableStateOf("") }
+
+    val permissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { _ -> }
 
     fun startEdit(budget: PaymentBudget) {
         editingBudget = budget
         selectedType = budget.type
         label = budget.label
         amountText = String.format("%.2f", budget.amount).replace(".", ",")
+        val hasRecharge = budget.rechargeDay != null && budget.rechargeAmount > 0.0
+        enableRecharge = hasRecharge
+        rechargeDayText = budget.rechargeDay?.toString() ?: ""
+        rechargeAmountText = if (budget.rechargeAmount > 0.0) {
+            String.format("%.2f", budget.rechargeAmount).replace(".", ",")
+        } else {
+            ""
+        }
     }
 
     fun resetForm() {
@@ -69,6 +89,9 @@ fun PaymentBudgetDialog(
         selectedType = PaymentTypes.TICKET_ALIMENTACAO
         label = ""
         amountText = ""
+        enableRecharge = false
+        rechargeDayText = ""
+        rechargeAmountText = ""
     }
 
     Dialog(
@@ -80,7 +103,7 @@ fun PaymentBudgetDialog(
             colors = CardDefaults.cardColors(containerColor = Surface),
             modifier = Modifier
                 .fillMaxWidth(0.92f)
-                .heightIn(max = 660.dp)
+                .heightIn(max = 680.dp)
                 .padding(vertical = 16.dp)
         ) {
             Column(
@@ -193,6 +216,27 @@ fun PaymentBudgetDialog(
                                         fontSize = 13.sp,
                                         color = PrimaryDark
                                     )
+                                    if (budget.rechargeDay != null && budget.rechargeAmount > 0.0) {
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            modifier = Modifier.padding(top = 2.dp)
+                                        ) {
+                                            Icon(
+                                                Icons.Default.EventRepeat,
+                                                contentDescription = null,
+                                                tint = Accent,
+                                                modifier = Modifier.size(12.dp)
+                                            )
+                                            Spacer(modifier = Modifier.width(4.dp))
+                                            Text(
+                                                text = "Recarga todo dia ${budget.rechargeDay} • +R$ ${String.format("%.2f", budget.rechargeAmount)}",
+                                                fontSize = 11.sp,
+                                                color = Accent,
+                                                maxLines = 1,
+                                                overflow = TextOverflow.Ellipsis
+                                            )
+                                        }
+                                    }
                                 }
 
                                 IconButton(
@@ -272,7 +316,7 @@ fun PaymentBudgetDialog(
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     Column(modifier = Modifier.weight(1f)) {
-                        Text("VALOR (R$) *", style = MaterialTheme.typography.labelSmall)
+                        Text("VALOR ATUAL (R$) *", style = MaterialTheme.typography.labelSmall)
                         OutlinedTextField(
                             value = amountText,
                             onValueChange = { amountText = it },
@@ -296,9 +340,93 @@ fun PaymentBudgetDialog(
                     }
                 }
 
+                Spacer(modifier = Modifier.height(10.dp))
+
+                // Opção de Recarga Mensal
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(Background)
+                        .border(1.dp, Border, RoundedCornerShape(12.dp))
+                        .clickable {
+                            val next = !enableRecharge
+                            enableRecharge = next
+                            if (next && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                                permissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                            }
+                        }
+                        .padding(horizontal = 12.dp, vertical = 8.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Icon(Icons.Default.EventRepeat, contentDescription = null, tint = Accent, modifier = Modifier.size(18.dp))
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Column {
+                            Text("Agendar recarga mensal", fontWeight = FontWeight.SemiBold, fontSize = 13.sp, color = TextPrimary)
+                            Text("Notifica no dia e recarrega o saldo", fontSize = 11.sp, color = TextSecondary)
+                        }
+                    }
+                    Switch(
+                        checked = enableRecharge,
+                        onCheckedChange = { next ->
+                            enableRecharge = next
+                            if (next && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                                permissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                            }
+                        },
+                        colors = SwitchDefaults.colors(checkedThumbColor = Color.White, checkedTrackColor = Primary)
+                    )
+                }
+
+                if (enableRecharge) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text("DIA DA RECARGA (1-31) *", style = MaterialTheme.typography.labelSmall)
+                            OutlinedTextField(
+                                value = rechargeDayText,
+                                onValueChange = { input ->
+                                    if (input.all { it.isDigit() } && input.length <= 2) {
+                                        rechargeDayText = input
+                                    }
+                                },
+                                placeholder = { Text("Ex: 5", color = TextMuted) },
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                singleLine = true,
+                                shape = RoundedCornerShape(12.dp),
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                        }
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text("VALOR RECARGA (R$) *", style = MaterialTheme.typography.labelSmall)
+                            OutlinedTextField(
+                                value = rechargeAmountText,
+                                onValueChange = { rechargeAmountText = it },
+                                placeholder = { Text("0,00", color = TextMuted) },
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                                singleLine = true,
+                                shape = RoundedCornerShape(12.dp),
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                        }
+                    }
+                }
+
                 Spacer(modifier = Modifier.height(14.dp))
 
                 val parsedAmount = amountText.replace(",", ".").toDoubleOrNull()
+                val parsedRechargeDay = rechargeDayText.toIntOrNull()?.takeIf { it in 1..31 }
+                val parsedRechargeAmount = rechargeAmountText.replace(",", ".").toDoubleOrNull()
+                val rechargeValid = !enableRecharge || (parsedRechargeDay != null && parsedRechargeAmount != null && parsedRechargeAmount > 0.0)
+
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -315,22 +443,26 @@ fun PaymentBudgetDialog(
 
                     Button(
                         onClick = {
-                            if (parsedAmount != null && parsedAmount >= 0.0) {
+                            if (parsedAmount != null && parsedAmount >= 0.0 && rechargeValid) {
                                 onSaveBudget(
                                     editingBudget?.copy(
                                         type = selectedType,
                                         label = label.trim(),
-                                        amount = parsedAmount
+                                        amount = parsedAmount,
+                                        rechargeDay = if (enableRecharge) parsedRechargeDay else null,
+                                        rechargeAmount = if (enableRecharge) (parsedRechargeAmount ?: 0.0) else 0.0
                                     ) ?: PaymentBudget(
                                         type = selectedType,
                                         label = label.trim(),
-                                        amount = parsedAmount
+                                        amount = parsedAmount,
+                                        rechargeDay = if (enableRecharge) parsedRechargeDay else null,
+                                        rechargeAmount = if (enableRecharge) (parsedRechargeAmount ?: 0.0) else 0.0
                                     )
                                 )
                                 resetForm()
                             }
                         },
-                        enabled = parsedAmount != null && parsedAmount >= 0.0,
+                        enabled = parsedAmount != null && parsedAmount >= 0.0 && rechargeValid,
                         shape = RoundedCornerShape(12.dp),
                         colors = ButtonDefaults.buttonColors(containerColor = Primary),
                         modifier = Modifier

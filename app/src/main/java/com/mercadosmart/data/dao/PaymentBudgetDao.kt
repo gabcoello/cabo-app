@@ -10,6 +10,9 @@ interface PaymentBudgetDao {
     @Query("SELECT * FROM payment_budgets ORDER BY updatedAt DESC")
     fun getAll(): Flow<List<PaymentBudget>>
 
+    @Query("SELECT * FROM payment_budgets ORDER BY updatedAt DESC")
+    suspend fun getAllOnce(): List<PaymentBudget>
+
     @Query("SELECT * FROM payment_budgets WHERE id = :id LIMIT 1")
     suspend fun getById(id: Long): PaymentBudget?
 

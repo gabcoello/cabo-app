@@ -15,7 +15,7 @@ import com.mercadosmart.data.model.ShoppingItem
 
 @Database(
     entities = [ShoppingItem::class, PurchaseHistory::class, Reminder::class, PaymentBudget::class],
-    version = 2,
+    version = 3,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {

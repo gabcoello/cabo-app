@@ -34,6 +34,11 @@
             android:name=".notification.ReminderReceiver"
             android:exported="false" />
 
+        <!-- BroadcastReceiver para notificação de recarga de saldo -->
+        <receiver
+            android:name=".notification.BudgetRechargeReceiver"
+            android:exported="false" />
+
         <!-- Reagendar alarmes após reinicialização do dispositivo -->
         <receiver
             android:name=".notification.BootReceiver"

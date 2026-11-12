@@ -28,6 +28,9 @@ data class PaymentBudget(
     val type: String, // Ticket Alimentação, Ticket Refeição, Crédito, Débito, Dinheiro/Pix
     val label: String = "", // Apelido opcional, ex: "Alelo", "Nubank"
     val amount: Double = 0.0,
+    val rechargeDay: Int? = null, // Dia do mês (1 a 31) em que o saldo é recarregado
+    val rechargeAmount: Double = 0.0, // Valor da recarga mensal
+    val lastRechargeMonthKey: String? = null, // Ex: "2026-11" para evitar recarga duplicada no mês
     val updatedAt: Long = System.currentTimeMillis()
 ) {
     fun displayName(): String {

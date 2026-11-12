@@ -224,12 +224,19 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     // Ações de Orçamento / Métodos de Pagamento
     fun savePaymentBudget(budget: PaymentBudget) {
         viewModelScope.launch {
-            paymentBudgetDao.insert(budget.copy(updatedAt = System.currentTimeMillis()))
+            val savedId = paymentBudgetDao.insert(budget.copy(updatedAt = System.currentTimeMillis()))
+            val savedBudget = budget.copy(id = if (budget.id > 0) budget.id else savedId)
+            if (savedBudget.rechargeDay != null && savedBudget.rechargeAmount > 0.0) {
+                AlarmScheduler.scheduleBudgetRecharge(getApplication(), savedBudget)
+            } else {
+                AlarmScheduler.cancelBudgetRecharge(getApplication(), savedBudget)
+            }
         }
     }
 
     fun deletePaymentBudget(budget: PaymentBudget) {
         viewModelScope.launch {
+            AlarmScheduler.cancelBudgetRecharge(getApplication(), budget)
             paymentBudgetDao.delete(budget)
         }
     }
