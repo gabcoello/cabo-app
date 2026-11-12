@@ -4,36 +4,32 @@
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
-    
-    <!-- Ícone Plim: P geométrico estilizado com barra de progresso e centelha de notificação -->
-    <group>
-        <!-- Haste vertical do P em Verde Esmeralda Plim -->
-        <path
-            android:fillColor="#10B981"
-            android:pathData="M37,36c0,-2.76 2.24,-5 5,-5s5,2.24 5,5v36c0,2.76 -2.24,5 -5,5s-5,-2.24 -5,-5V36z" />
-        
-        <!-- Arco superior do P em Verde Menta Vibrante (simboliza o ciclo de orçamento) -->
-        <path
-            android:fillColor="#34D399"
-            android:pathData="M46,31h13c7.73,0 14,6.27 14,14s-6.27,14 -14,14H46v-9h12c2.76,0 5,-2.24 5,-5s-2.24,-5 -5,-5H46V31z" />
-        
-        <!-- Ponto central de equilíbrio financeiro -->
-        <path
-            android:fillColor="#FFFFFF"
-            android:pathData="M52,45m-3,0a3,3 0,1 1,6 0a3,3 0,1 1,-6 0" />
 
-        <!-- Centelha "Plim ✨" no canto superior (efeito sonoro / notificação de saldo) -->
-        <!-- Estrela de 4 pontas geométrica em Dourado / Branco Radiante -->
+    <group>
+        <!-- Teto / Circunflexo protetor do "Ô" em Dourado Vibrante (#FBBF24) -->
         <path
-            android:fillColor="#FBBF24"
-            android:pathData="M78,25q0,6 6,6q-6,0 -6,6q0,-6 -6,-6q6,0 6,-6z" />
+            android:pathData="M42,34 L54,23 L66,34"
+            android:strokeColor="#FBBF24"
+            android:strokeWidth="6"
+            android:strokeLineCap="round"
+            android:strokeLineJoin="round" />
+
+        <!-- Letra "C" geométrica em Verde Esmeralda Pleno (#10B981) -->
+        <!-- Arco do C estilizado como anel de orçamento com pontas arredondadas -->
+        <path
+            android:pathData="M66,42 A18,18 0 1,0 66,74"
+            android:strokeColor="#10B981"
+            android:strokeWidth="9"
+            android:strokeLineCap="round" />
+
+        <!-- Ponto central de equilíbrio (Moeda / Saldo protegido) em Branco Puro -->
         <path
             android:fillColor="#FFFFFF"
-            android:pathData="M78,27q0,4 4,4q-4,0 -4,4q0,-4 -4,-4q4,0 4,-4z" />
-            
-        <!-- Mini centelha complementar -->
+            android:pathData="M54,58m-4.5,0a4.5,4.5 0,1 1,9 0a4.5,4.5 0,1 1,-9 0" />
+
+        <!-- Mini centelha de economia no canto superior direito -->
         <path
             android:fillColor="#38BDF8"
-            android:pathData="M33,65q0,3 3,3q-3,0 -3,3q0,-3 -3,-3q3,0 3,-3z" />
+            android:pathData="M78,28q0,3 3,3q-3,0 -3,3q0,-3 -3,-3q3,0 3,-3z" />
     </group>
 </vector>

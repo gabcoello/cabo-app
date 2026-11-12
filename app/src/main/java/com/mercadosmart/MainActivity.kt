@@ -126,9 +126,9 @@ class MainActivity : ComponentActivity() {
                                         contentAlignment = Alignment.Center
                                     ) {
                                         Text(
-                                            "P",
+                                            "C",
                                             fontWeight = FontWeight.Black,
-                                            fontSize = 19.sp,
+                                            fontSize = 20.sp,
                                             color = Color.White
                                         )
                                     }
@@ -137,16 +137,16 @@ class MainActivity : ComponentActivity() {
 
                                     Column {
                                         Text(
-                                            "Plim",
+                                            "Cabô",
                                             fontWeight = FontWeight.ExtraBold,
-                                            fontSize = 16.sp,
+                                            fontSize = 17.sp,
                                             letterSpacing = (-0.3).sp,
                                             color = TextPrimary,
                                             maxLines = 1,
                                             overflow = TextOverflow.Ellipsis
                                         )
                                         Text(
-                                            "Gastos & Orçamento",
+                                            "Controle, Balanço & Orçamento",
                                             fontSize = 10.sp,
                                             color = TextSecondary,
                                             maxLines = 1,

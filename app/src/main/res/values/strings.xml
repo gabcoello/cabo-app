@@ -1,5 +1,5 @@
 <resources>
-    <string name="app_name">Plim</string>
-    <string name="notification_channel_name">Notificações do Plim</string>
-    <string name="notification_channel_desc">Alertas de recarga de saldo e lembretes de gastos do Plim</string>
+    <string name="app_name">Cabô</string>
+    <string name="notification_channel_name">Notificações do Cabô</string>
+    <string name="notification_channel_desc">Alertas de recarga e limites de orçamento do Cabô</string>
 </resources>
