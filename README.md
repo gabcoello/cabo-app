@@ -1,68 +1,105 @@
-# 🛍️ MercadoSmart (Android Nativo - Kotlin + Jetpack Compose)
+# ⚡ Cabô – Controle, Balanço & Orçamento
 
-Aplicativo nativo Android de alta performance para listas de compras inteligentes, desenvolvido com **Kotlin**, **Jetpack Compose (Material 3)**, **Room Database (SQLite otimizado)** e **AlarmManager**.
+> **C**ontrole de **A**quisições, **B**alanço e **Ô**rçamento.  
+> *"Chegou dia 10 e já cabô? Assuma o controle de listas, tickets e orçamento para nunca mais passar do limite."*
 
----
-
-## ⚖️ Comparativo Direto: React Native vs. Kotlin + Compose
-
-| Aspecto | React Native + Expo (`compras-app`) | Kotlin + Jetpack Compose (`mercado-smart`) |
-| :--- | :--- | :--- |
-| **Linguagem / UI** | JavaScript / React Native | Kotlin / Jetpack Compose |
-| **Banco de Dados Local** | AsyncStorage (Chave/Valor JSON) | Room Database (SQLite relacional nativo) |
-| **Consumo de Memória (RAM)** | ~90 MB - 140 MB | ~35 MB - 60 MB (60% menos consumo) |
-| **Tamanho do APK Final** | ~45 MB - 65 MB | ~10 MB - 16 MB (3x menor) |
-| **Performance de Renderização** | Bridge JS / Fabric C++ | Compilado direto em Bytecode / GPU Vulkan |
-| **Alarmes / Notificações** | expo-notifications (Worker JS) | AlarmManager + BroadcastReceiver nativo |
-| **Modo de Teste sem SDK** | **Sim (Expo Go direto no celular)** | Requer Android Studio ou APK gerado |
+Aplicativo nativo Android moderno, veloz e offline-first desenvolvido com **Kotlin**, **Jetpack Compose (Material 3)**, **Room Database (SQLite)** e **AlarmManager**.
 
 ---
 
-## 📁 Estrutura do Projeto Kotlin
+## ✨ Principais Funcionalidades
+
+### 💳 1. Gestão Multi-Carteiras & Teto de Gastos
+- Cadastro independente de saldos por meio de pagamento:
+  - **Ticket Alimentação**
+  - **Ticket Refeição**
+  - **Cartão de Crédito**
+  - **Cartão de Débito**
+  - **Dinheiro / Pix**
+- **Dedução Automática:** Ao finalizar uma compra, selecione o meio utilizado e o valor é abatido instantaneamente do saldo disponível.
+- **Apelido para Gastos Não Cadastrados:** Se o orçamento de um meio estiver zerado ou não cadastrado, atribua um apelido ao gasto para identificá-lo no extrato.
+
+### ⏰ 2. Recarga Automática com Notificações Agendadas
+- Programe o dia do mês e o valor da recarga de cada benefício/carteira.
+- Notificação local disparada no dia agendado via `AlarmManager` + `BroadcastReceiver`, atualizando o saldo automaticamente.
+
+### 📊 3. Painel Analítico Mensal & Barra de Excesso
+- Aba dedicada **"Mensal"** que abre e fecha os ciclos a cada mês:
+  - **Barra Segmentada Dinâmica:** Fica **verde** conforme o orçamento é consumido dentro do limite e enche em **vermelho** apenas a fração excedente.
+  - **Porcentagem de Excesso:** Detalha quanto cada meio de pagamento estourou a cota.
+  - **Picos de Compra:** Identifica os períodos de maior volume de gastos no mês (Manhã, Tarde ou Noite).
+  - **Histórico Mensal:** Navegue pelos meses anteriores para comparar seus padrões de consumo.
+
+### 🛒 4. Listas Inteligentes & Comparador de Menor Preço
+- Lista de compras ativa com cálculo em tempo real de itens e valores.
+- Comparador de preços que identifica automaticamente a loja mais barata com base no histórico real de compras anteriores (e avisa caso os valores sejam os mesmos).
+- Lembretes de compras com notificações e alertas sonoros configuráveis.
+
+---
+
+## 🏗️ Arquitetura e Tecnologias
+
+- **Linguagem:** Kotlin 2.0+
+- **Interface:** Jetpack Compose + Material Design 3 (Edge-to-Edge habilitado)
+- **Persistência Local:** Room Database (SQLite relacional nativo)
+- **Agendamento de Alarmes:** Android `AlarmManager` nativo com `RECEIVE_BOOT_COMPLETED`
+- **Arquitetura:** MVVM (Model-View-ViewModel) com StateFlow e Coroutines
+- **Identidade Visual:** Ícone adaptativo vetorial exclusivo com tema Slate 900 e Emerald
+
+---
+
+## 📁 Estrutura do Projeto
 
 ```
-mercado-smart/
+cabo-app/
 ├── app/
 │   ├── build.gradle.kts
 │   └── src/main/
 │       ├── AndroidManifest.xml
-│       └── java/com/mercadosmart/
-│           ├── MainActivity.kt               # Scaffold, Edge-to-Edge e Navigation
-│           ├── MercadoSmartApp.kt            # Canais de notificação
-│           ├── data/
-│           │   ├── AppDatabase.kt            # Singleton Room Database
-│           │   ├── model/
-│           │   │   ├── ShoppingItem.kt       # Entidade de itens da lista
-│           │   │   ├── PurchaseHistory.kt    # Entidade de compras arquivadas
-│           │   │   └── Reminder.kt           # Entidade de lembretes
-│           │   └── dao/
-│           │       ├── ShoppingItemDao.kt
-│           │       ├── PurchaseHistoryDao.kt
-│           │       └── ReminderDao.kt
-│           ├── viewmodel/
-│           │   └── MainViewModel.kt          # StateFlows e regras de negócio
-│           ├── notification/
-│           │   └── NotificationHelper.kt     # AlarmScheduler e BroadcastReceivers
-│           └── ui/
-│               ├── theme/ (Color, Theme, Type)
-│               ├── components/
-│               │   ├── ItemDialog.kt         # Diálogo de adicionar/editar item
-│               │   └── FinishPurchaseDialog.kt
-│               └── screens/
-│                   ├── ShoppingListScreen.kt # Lista ativa com totais dinâmicos
-│                   ├── HistoryScreen.kt      # Histórico expansível por local
-│                   ├── CompareScreen.kt      # Comparador do menor preço
-│                   └── RemindersScreen.kt    # Lembretes com alarme sonoro
+│       ├── java/com/mercadosmart/
+│       │   ├── MainActivity.kt               # Scaffold, Edge-to-Edge e Navigation Tabs
+│       │   ├── MercadoSmartApp.kt            # Application e canais de notificação
+│       │   ├── data/
+│       │   │   ├── AppDatabase.kt            # Singleton Room Database (v4)
+│       │   │   ├── model/
+│       │   │   │   ├── ShoppingItem.kt       # Entidade de itens da lista ativa
+│       │   │   │   ├── PurchaseHistory.kt    # Entidade de compras arquivadas
+│       │   │   │   ├── PaymentBudget.kt      # Entidade de carteiras e orçamentos
+│       │   │   │   ├── MonthlySummary.kt     # Entidade de consolidação mensal
+│       │   │   │   └── Reminder.kt           # Entidade de lembretes
+│       │   │   └── dao/
+│       │   │       ├── ShoppingItemDao.kt
+│       │   │       ├── PurchaseHistoryDao.kt
+│       │   │       ├── PaymentBudgetDao.kt
+│       │   │       ├── MonthlySummaryDao.kt
+│       │   │       └── ReminderDao.kt
+│       │   ├── viewmodel/
+│       │   │   └── MainViewModel.kt          # Regras de negócio, cálculos e StateFlows
+│       │   ├── notification/
+│       │   │   └── NotificationHelper.kt     # AlarmManager e agendamento de recargas
+│       │   └── ui/
+│       │       ├── theme/ (Color, Theme, Type)
+│       │       ├── components/               # Diálogos de gastos, orçamentos e compras
+│       │       └── screens/
+│       │           ├── ShoppingListScreen.kt # Lista ativa
+│       │           ├── HistoryScreen.kt      # Histórico de compras por mercado
+│       │           ├── CompareScreen.kt      # Comparador de preços inteligentes
+│       │           ├── MonthlySummaryScreen.kt # Dashboard mensal verde/vermelho
+│       │           └── RemindersScreen.kt    # Lembretes com alarme
+│       └── res/
+│           ├── drawable/ (ic_launcher_background.xml, ic_launcher_foreground.xml)
+│           └── values/ (strings.xml, themes.xml)
 └── build.gradle.kts
 ```
 
 ---
 
-## 🛠️ Como abrir e testar no Android Studio
+## 🚀 Como Executar
 
-1. Abra o **Android Studio**.
-2. Clique em **File > Open** e selecione o diretório:
-   `C:\Users\gabri\.gemini\antigravity\scratch\mercado-smart`
-3. O Gradle sincronizará automaticamente as dependências do Compose e Room.
-4. Conecte seu celular Android via cabo USB (com Depuração USB ativada) ou inicie um emulador.
-5. Clique no botão verde de **Run (Play)** no topo do Android Studio.
+1. Clone o repositório:
+   ```bash
+   git clone https://github.com/gabcoello/cabo-app.git
+   ```
+2. Abra o projeto no **Android Studio** (Koala ou superior).
+3. Aguarde o Gradle sincronizar as dependências.
+4. Execute em um emulador ou dispositivo físico com Android 8.0 (API 26) ou superior.
