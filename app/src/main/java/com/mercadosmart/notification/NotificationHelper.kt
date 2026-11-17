@@ -7,7 +7,9 @@ import android.app.PendingIntent
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.media.RingtoneManager
 import android.os.Build
+import android.os.PowerManager
 import androidx.core.app.NotificationCompat
 import com.mercadosmart.MainActivity
 import com.mercadosmart.R
@@ -48,12 +50,19 @@ internal fun showAppNotification(context: Context, title: String, body: String) 
         PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
     )
 
+    val soundUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
+
     val notification = NotificationCompat.Builder(context, CHANNEL_ID)
-        .setSmallIcon(android.R.drawable.ic_dialog_info)
+        .setSmallIcon(android.R.drawable.ic_lock_idle_alarm)
         .setContentTitle(title)
         .setContentText(body)
         .setStyle(NotificationCompat.BigTextStyle().bigText(body))
-        .setPriority(NotificationCompat.PRIORITY_HIGH)
+        .setPriority(NotificationCompat.PRIORITY_MAX)
+        .setCategory(NotificationCompat.CATEGORY_ALARM)
+        .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+        .setDefaults(NotificationCompat.DEFAULT_ALL)
+        .setSound(soundUri)
+        .setVibrate(longArrayOf(0, 400, 200, 400))
         .setContentIntent(pendingIntent)
         .setAutoCancel(true)
         .build()
@@ -63,9 +72,39 @@ internal fun showAppNotification(context: Context, title: String, body: String) 
 
 class ReminderReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
-        val title = intent.getStringExtra("title") ?: "Lembrete de Compras"
-        val note = intent.getStringExtra("note") ?: "Hora de conferir sua lista de compras!"
-        showAppNotification(context, "🛒 $title", note)
+        val powerManager = context.getSystemService(Context.POWER_SERVICE) as PowerManager
+        val wakeLock = powerManager.newWakeLock(
+            PowerManager.PARTIAL_WAKE_LOCK,
+            "CaboApp:ReminderWakeLock"
+        )
+        try {
+            wakeLock.acquire(5_000L)
+            val title = intent.getStringExtra("title") ?: "Lembrete de Compras"
+            val note = intent.getStringExtra("note") ?: "Hora de conferir sua lista de compras!"
+            val reminderId = intent.getLongExtra("id", -1L)
+
+            showAppNotification(context, "⏰ $title", note)
+
+            if (reminderId > 0L) {
+                val pendingResult = goAsync()
+                CoroutineScope(Dispatchers.IO).launch {
+                    try {
+                        val reminder = AppDatabase.getInstance(context).reminderDao()
+                            .getAllOnce()
+                            .firstOrNull { it.id == reminderId && it.isActive }
+                        if (reminder != null) {
+                            AlarmScheduler.scheduleReminder(context, reminder)
+                        }
+                    } finally {
+                        pendingResult.finish()
+                    }
+                }
+            }
+        } finally {
+            if (wakeLock.isHeld) {
+                wakeLock.release()
+            }
+        }
     }
 }
 
@@ -134,6 +173,12 @@ class BootReceiver : BroadcastReceiver() {
 }
 
 object AlarmScheduler {
+    fun canScheduleExactAlarms(context: Context): Boolean {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return true
+        val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
+        return alarmManager.canScheduleExactAlarms()
+    }
+
     private fun scheduleExact(alarmManager: AlarmManager, triggerAtMillis: Long, pendingIntent: PendingIntent) {
         try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && !alarmManager.canScheduleExactAlarms()) {
@@ -182,22 +227,7 @@ object AlarmScheduler {
         return hours to minutes
     }
 
-    fun scheduleReminder(context: Context, reminder: Reminder) {
-        val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
-
-        val intent = Intent(context, ReminderReceiver::class.java).apply {
-            putExtra("title", reminder.title)
-            putExtra("note", if (reminder.note.isNotBlank()) reminder.note else "Hora de conferir sua despensa e lista!")
-            putExtra("id", reminder.id)
-        }
-
-        val pendingIntent = PendingIntent.getBroadcast(
-            context,
-            reminder.id.toInt(),
-            intent,
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-        )
-
+    fun computeNextReminderTriggerMillis(reminder: Reminder): Long {
         val (hours, minutes) = parseHourMinute(reminder.time)
         val nowMillis = System.currentTimeMillis()
 
@@ -221,7 +251,6 @@ object AlarmScheduler {
 
             val targetDay = dayMap[reminder.dayOfWeek.trim().lowercase()]
             if (targetDay != null) {
-                // Considera hoje se o dia da semana coincidir e o horário ainda não tiver passado
                 if (get(Calendar.DAY_OF_WEEK) != targetDay || timeInMillis <= nowMillis) {
                     if (get(Calendar.DAY_OF_WEEK) == targetDay && timeInMillis <= nowMillis) {
                         add(Calendar.DAY_OF_YEAR, 7)
@@ -235,8 +264,49 @@ object AlarmScheduler {
                 add(Calendar.DAY_OF_YEAR, 1)
             }
         }
+        return calendar.timeInMillis
+    }
 
-        scheduleExact(alarmManager, calendar.timeInMillis, pendingIntent)
+    fun scheduleReminder(context: Context, reminder: Reminder) {
+        val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
+
+        val intent = Intent(context, ReminderReceiver::class.java).apply {
+            putExtra("title", reminder.title)
+            putExtra("note", if (reminder.note.isNotBlank()) reminder.note else "Hora de conferir sua despensa e lista!")
+            putExtra("id", reminder.id)
+        }
+
+        val pendingIntent = PendingIntent.getBroadcast(
+            context,
+            reminder.id.toInt(),
+            intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+
+        val triggerAtMillis = computeNextReminderTriggerMillis(reminder)
+
+        // Usa setAlarmClock para acordar o aparelho exatamente no horário mesmo em Doze mode
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && !alarmManager.canScheduleExactAlarms()) {
+                scheduleExact(alarmManager, triggerAtMillis, pendingIntent)
+                return
+            }
+            val showAppIntent = Intent(context, MainActivity::class.java).apply {
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+            }
+            val showPendingIntent = PendingIntent.getActivity(
+                context,
+                reminder.id.toInt(),
+                showAppIntent,
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            )
+            alarmManager.setAlarmClock(
+                AlarmManager.AlarmClockInfo(triggerAtMillis, showPendingIntent),
+                pendingIntent
+            )
+        } catch (_: SecurityException) {
+            scheduleExact(alarmManager, triggerAtMillis, pendingIntent)
+        }
     }
 
     fun cancelReminder(context: Context, reminder: Reminder) {

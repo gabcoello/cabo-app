@@ -2,7 +2,11 @@ package com.mercadosmart.ui.screens
 
 import android.Manifest
 import android.app.TimePickerDialog
+import android.content.Intent
+import android.net.Uri
 import android.os.Build
+import android.provider.Settings
+import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
@@ -40,13 +44,24 @@ import com.mercadosmart.data.model.Reminder
 import com.mercadosmart.notification.AlarmScheduler
 import com.mercadosmart.ui.theme.*
 import com.mercadosmart.viewmodel.MainViewModel
+import java.text.SimpleDateFormat
 import java.util.Calendar
+import java.util.Date
+import java.util.Locale
 
 @Composable
 fun RemindersScreen(viewModel: MainViewModel) {
+    val context = LocalContext.current
     val reminders by viewModel.reminders.collectAsState()
     var showDialog by remember { mutableStateOf(false) }
     var reminderToEdit by remember { mutableStateOf<Reminder?>(null) }
+    var canExactAlarms by remember { mutableStateOf(AlarmScheduler.canScheduleExactAlarms(context)) }
+
+    val exactAlarmSettingsLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartActivityForResult()
+    ) {
+        canExactAlarms = AlarmScheduler.canScheduleExactAlarms(context)
+    }
 
     // Launcher de permissão de notificação Android 13+
     val permissionLauncher = rememberLauncherForActivityResult(
@@ -77,6 +92,41 @@ fun RemindersScreen(viewModel: MainViewModel) {
                 Column {
                     Text("Lembretes com Alarme Sonoro", fontWeight = FontWeight.Bold, fontSize = 14.sp, color = TextPrimary)
                     Text("Configure dias e horários para planejar e repor o estoque de casa.", fontSize = 12.sp, color = TextSecondary)
+                }
+            }
+
+            // Aviso para liberar Alarmes Exatos no Android 12+ caso esteja desativado
+            if (!canExactAlarms && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 4.dp)
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(WarningLight)
+                        .border(1.dp, Warning.copy(alpha = 0.4f), RoundedCornerShape(12.dp))
+                        .padding(12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("Permissão de alarme exato desativada", fontWeight = FontWeight.Bold, fontSize = 12.sp, color = TextPrimary)
+                        Text("Ative para o alarme despertar exatamente no minuto escolhido.", fontSize = 11.sp, color = TextSecondary)
+                    }
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Button(
+                        onClick = {
+                            val intent = Intent(
+                                Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM,
+                                Uri.parse("package:${context.packageName}")
+                            )
+                            exactAlarmSettingsLauncher.launch(intent)
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = Warning),
+                        shape = RoundedCornerShape(8.dp),
+                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                        modifier = Modifier.height(32.dp)
+                    ) {
+                        Text("Ativar", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                    }
                 }
             }
 
@@ -236,6 +286,13 @@ fun RemindersScreen(viewModel: MainViewModel) {
                     } else {
                         viewModel.updateReminder(saved)
                     }
+                    val triggerMillis = AlarmScheduler.computeNextReminderTriggerMillis(saved)
+                    val fmt = SimpleDateFormat("dd/MM 'às' HH:mm", Locale("pt", "BR"))
+                    Toast.makeText(
+                        context,
+                        "Alarme agendado para ${fmt.format(Date(triggerMillis))}",
+                        Toast.LENGTH_LONG
+                    ).show()
                     showDialog = false
                     reminderToEdit = null
                 }
