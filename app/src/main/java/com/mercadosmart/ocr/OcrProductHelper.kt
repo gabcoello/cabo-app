@@ -4,9 +4,12 @@ import android.content.Context
 import android.net.Uri
 import androidx.core.content.FileProvider
 import com.google.mlkit.vision.common.InputImage
+import com.google.mlkit.vision.text.Text
 import com.google.mlkit.vision.text.TextRecognition
 import com.google.mlkit.vision.text.latin.TextRecognizerOptions
 import java.io.File
+import kotlin.math.abs
+import kotlin.math.max
 
 data class OcrScanResult(
     val name: String = "",
@@ -40,7 +43,8 @@ object OcrProductHelper {
 
             recognizer.process(image)
                 .addOnSuccessListener { visionText ->
-                    val parsed = parseTextToProduct(visionText.text)
+                    val visualText = buildVisuallyAlignedText(visionText)
+                    val parsed = parseTextToProduct(visualText.ifBlank { visionText.text })
                     onResult(parsed)
                 }
                 .addOnFailureListener { e ->
@@ -52,9 +56,57 @@ object OcrProductHelper {
     }
 
     /**
+     * Reconstrói as linhas do OCR agrupando elementos que estão na mesma altura visual (boundingBox.centerY),
+     * ordenados da esquerda para a direita. Isso evita que rótulos em coluna (ex: "PESO:", "R$/kg:")
+     * fiquem separados dos seus valores ("0,608kg", "49,50").
+     */
+    private fun buildVisuallyAlignedText(visionText: Text): String {
+        val allLines = visionText.textBlocks
+            .flatMap { it.lines }
+            .filter { it.text.isNotBlank() && it.boundingBox != null }
+            .sortedBy { it.boundingBox!!.centerY() }
+
+        if (allLines.isEmpty()) return visionText.text
+
+        val rows = mutableListOf<MutableList<Text.Line>>()
+        for (line in allLines) {
+            val box = line.boundingBox!!
+            val cy = box.centerY()
+            val h = max(box.height(), 16)
+
+            val targetRow = rows.firstOrNull { row ->
+                val avgY = row.map { it.boundingBox!!.centerY() }.average()
+                val avgH = row.map { max(it.boundingBox!!.height(), 16) }.average()
+                abs(cy - avgY) <= max(h, avgH.toInt()) * 0.65
+            }
+
+            if (targetRow != null) {
+                targetRow.add(line)
+            } else {
+                rows.add(mutableListOf(line))
+            }
+        }
+
+        return rows.joinToString("\n") { row ->
+            row.sortedBy { it.boundingBox!!.left }
+                .joinToString(" ") { it.text.trim() }
+        }
+    }
+
+    private fun normalizeNumericNoise(text: String): String {
+        return text
+            // Corrige OCR lendo "O,608" ou "o.608" como letra O no lugar de 0
+            .replace(Regex("""(?<![A-Za-zÀ-ÿ])[oO]\s*([.,]\s*\d)"""), "0$1")
+            // Remove espaços acidentais ao redor de vírgula/ponto decimal (ex: "0, 608" -> "0,608")
+            .replace(Regex("""(\d)\s*([.,])\s*(\d)"""), "$1$2$3")
+            // Se houver peso sem zero à esquerda (ex: ",608kg" ou ".608 kg"), adiciona o 0
+            .replace(Regex("""(?<!\d)([.,]\d{1,3})\s*(kg|g)\b""", RegexOption.IGNORE_CASE), "0$1$2")
+    }
+
+    /**
      * Extrai exclusivamente:
      * 1. Descrição do produto (1 ou mais palavras válidas)
-     * 2. Peso (kg ou g)
+     * 2. Peso (kg ou g, preservando 0 à esquerda e casas decimais)
      * 3. Preço por kg (R$/kg ou /kg)
      * 4. Valor com R$ na frente
      * Ignora todo o restante (data, validade, valido ate, embalado em, fabricacao, lote, tara, codigo de barras).
@@ -62,50 +114,79 @@ object OcrProductHelper {
     internal fun parseTextToProduct(rawText: String): OcrScanResult {
         if (rawText.isBlank()) return OcrScanResult()
 
-        val lines = rawText.lines()
+        val normalizedText = normalizeNumericNoise(rawText)
+        val lines = normalizedText.lines()
             .map { it.trim() }
             .filter { it.isNotBlank() }
 
-        // 1. Preço por kg: "R$/kg: 49,50", "/kg: 49,50" ou "49,50 /kg"
+        // 1. Preço por kg: "R$/kg: 49,50", "$/kg 49,50", "/kg: 49,50", "49,50 /kg"
         val afterPerKgRegex = Regex(
-            """(?:r\$\s*/\s*kg|/\s*kg|por\s*kg|o\s*kg)\s*[:=]?\s*(\d{1,4}[.,]\d{2})""",
+            """(?:r?\$?\s*/\s*kg|por\s*kg|o\s*kg)\s*[:=\-]?\s*(\d{1,4}[.,]\d{2})""",
             RegexOption.IGNORE_CASE
         )
         val beforePerKgRegex = Regex(
             """(\d{1,4}[.,]\d{2})\s*(?:/\s*kg|por\s*kg|o\s*kg)""",
             RegexOption.IGNORE_CASE
         )
+        val perKgLabelOnlyRegex = Regex("""(?:r?\$?\s*/\s*kg|por\s*kg|o\s*kg)""", RegexOption.IGNORE_CASE)
+        val decimalPriceRegex = Regex("""(\d{1,4}[.,]\d{2})""")
 
         var extractedPricePerKg = ""
-        val afterPerKgMatch = afterPerKgRegex.find(rawText)
-        if (afterPerKgMatch != null) {
-            extractedPricePerKg = afterPerKgMatch.groupValues[1].replace(",", ".")
-        } else {
-            val beforePerKgMatch = beforePerKgRegex.find(rawText)
-            if (beforePerKgMatch != null) {
-                extractedPricePerKg = beforePerKgMatch.groupValues[1].replace(",", ".")
+        for (i in lines.indices) {
+            val line = lines[i]
+            val afterMatch = afterPerKgRegex.find(line)
+            if (afterMatch != null) {
+                extractedPricePerKg = afterMatch.groupValues[1].replace(",", ".")
+                break
+            }
+            val beforeMatch = beforePerKgRegex.find(line)
+            if (beforeMatch != null) {
+                extractedPricePerKg = beforeMatch.groupValues[1].replace(",", ".")
+                break
+            }
+            // Se o rótulo R$/kg ficou isolado em uma linha e o valor na próxima linha
+            if (perKgLabelOnlyRegex.containsMatchIn(line) && i + 1 < lines.size) {
+                val nextLine = lines[i + 1]
+                if (!nextLine.lowercase().contains("total") && !nextLine.lowercase().contains("r$")) {
+                    val nextNum = decimalPriceRegex.find(nextLine)
+                    if (nextNum != null) {
+                        extractedPricePerKg = nextNum.groupValues[1].replace(",", ".")
+                        break
+                    }
+                }
+            }
+        }
+
+        if (extractedPricePerKg.isEmpty()) {
+            val fullAfter = afterPerKgRegex.find(normalizedText)
+            if (fullAfter != null) {
+                extractedPricePerKg = fullAfter.groupValues[1].replace(",", ".")
+            } else {
+                val fullBefore = beforePerKgRegex.find(normalizedText)
+                if (fullBefore != null) {
+                    extractedPricePerKg = fullBefore.groupValues[1].replace(",", ".")
+                }
             }
         }
 
         // 2. Valor com R$ na frente (excluindo R$/kg)
-        val currencyRegex = Regex("""R\$(?!\s*/\s*kg)\s*[:=]?\s*(\d{1,4}[.,]\d{2})""", RegexOption.IGNORE_CASE)
+        val currencyRegex = Regex("""R\$(?!\s*/\s*kg)\s*[:=\-]?\s*(\d{1,4}[.,]\d{2})""", RegexOption.IGNORE_CASE)
         var extractedPrice = ""
-        val currencyMatches = currencyRegex.findAll(rawText).toList()
+        val currencyMatches = currencyRegex.findAll(normalizedText).toList()
         if (currencyMatches.isNotEmpty()) {
-            // Se houver mais de um R$, pega o último (geralmente TOTAL R$) ou o primeiro válido
             extractedPrice = currencyMatches.last().groupValues[1].replace(",", ".")
         }
 
-        // 3. Peso (kg ou g), ignorando tara e linhas de preço/kg
+        // 3. Peso (kg ou g), preservando 0 à esquerda e casas decimais (ex: 0.608)
         var extractedWeight = ""
         var extractedWeightUnit = ""
 
         val explicitWeightRegex = Regex(
-            """peso(?:\s+l[ií]q(?:uido)?)?\s*:?\s*(\d{1,4}(?:[.,]\d{1,3})?)\s*(kg|g)\b""",
+            """peso(?:\s+l[ií]q(?:uido)?)?\s*[:=\-]?\s*(\d{1,4}(?:[.,]\d{1,3})?)\s*(kg|g)\b""",
             RegexOption.IGNORE_CASE
         )
         val genericWeightRegex = Regex(
-            """\b(\d{1,4}(?:[.,]\d{1,3})?)\s*(kg|g)\b""",
+            """(\d{1,4}(?:[.,]\d{1,3})?)\s*(kg|g)\b""",
             RegexOption.IGNORE_CASE
         )
 
@@ -123,7 +204,7 @@ object OcrProductHelper {
             for (line in nonTaraLines) {
                 val lower = line.lowercase()
                 val isPricePerKgLine = lower.contains("/kg") || lower.contains("por kg") ||
-                    lower.contains("o kg") || lower.contains("r$")
+                    lower.contains("o kg")
                 if (!isPricePerKgLine) {
                     val match = genericWeightRegex.find(line)
                     if (match != null) {
@@ -143,7 +224,7 @@ object OcrProductHelper {
             "oferta", "promocao", "promoção", "atacado", "varejo"
         )
         val dateRegex = Regex("""\b\d{1,2}[/-]\d{1,2}[/-]\d{2,4}\b""")
-        val decimalRegex = Regex("""(?<!\d)\d{1,4}[.,]\d{2}(?!\d)""")
+        val decimalOnlyRegex = Regex("""(?<!\d)\d{1,4}[.,]\d{2}(?!\d)""")
 
         val candidateLines = lines.filter { line ->
             val lower = line.lowercase()
@@ -151,7 +232,7 @@ object OcrProductHelper {
             val isBarcode = line.count { it.isDigit() } >= 7
             val hasIgnoredMetadata = ignoredLineTerms.any { term -> lower.contains(term) }
             val hasDatePattern = dateRegex.containsMatchIn(line)
-            val isMostlyNumberOrPrice = decimalRegex.matches(line) || genericWeightRegex.matches(line)
+            val isMostlyNumberOrPrice = decimalOnlyRegex.matches(line) || genericWeightRegex.matches(line)
             val wordCount = line.split(Regex("\\s+")).count { token -> token.any { it.isLetter() } }
 
             hasLetters && wordCount >= 1 && !isBarcode && !hasIgnoredMetadata &&
