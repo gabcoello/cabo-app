@@ -8,7 +8,7 @@ import androidx.room.PrimaryKey
  * Armazenado como JSON dentro de PurchaseHistory para simplicidade.
  */
 data class PurchaseItem(
-    val name: String,
+    val name: String = "",
     val quantity: Double = 1.0,
     val unit: String = "un",
     val price: Double = 0.0,
@@ -16,23 +16,25 @@ data class PurchaseItem(
     val pricePerKg: Double = 0.0,
     val weightAmount: Double = 0.0,
     val packageSize: Double = 0.0,
-    val packageSizeUnit: String = ""
+    val packageSizeUnit: String? = ""
 ) {
     fun formattedMeasure(): String {
+        val safeUnit = (unit as String?).orEmpty().ifBlank { "un" }
+        val safePkgUnit = packageSizeUnit.orEmpty()
         return when {
-            (unit == "kg" || unit == "g") && weightAmount > 0 -> {
+            (safeUnit == "kg" || safeUnit == "g") && weightAmount > 0 -> {
                 val w = if (weightAmount % 1.0 == 0.0) weightAmount.toInt().toString() else String.format("%.3f", weightAmount).trimEnd('0').trimEnd(',', '.')
-                val base = "$w $unit"
+                val base = "$w $safeUnit"
                 if (pricePerKg > 0) "$base • R$ ${String.format("%.2f", pricePerKg)}/kg" else base
             }
-            (unit == "pct" || unit == "cx") && packageSize > 0 && packageSizeUnit.isNotBlank() -> {
+            (safeUnit == "pct" || safeUnit == "cx") && packageSize > 0 && safePkgUnit.isNotBlank() -> {
                 val q = if (quantity % 1.0 == 0.0) quantity.toInt().toString() else quantity.toString()
                 val s = if (packageSize % 1.0 == 0.0) packageSize.toInt().toString() else packageSize.toString()
-                "$q $unit ($s$packageSizeUnit) × R$ ${String.format("%.2f", price)}"
+                "$q $safeUnit ($s$safePkgUnit) × R$ ${String.format("%.2f", price)}"
             }
             else -> {
                 val q = if (quantity % 1.0 == 0.0) quantity.toInt().toString() else quantity.toString()
-                "$q $unit × R$ ${String.format("%.2f", price)}"
+                "$q $safeUnit × R$ ${String.format("%.2f", price)}"
             }
         }
     }
