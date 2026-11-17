@@ -372,13 +372,13 @@ fun ScannerCameraDialog(
                 }
             }
 
-            // Botão Inferior de Captura
+            // Botão Inferior de Captura (posicionado bem acima da barra de navegação/Home)
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
                     .align(Alignment.BottomCenter)
                     .navigationBarsPadding()
-                    .padding(bottom = 28.dp),
+                    .padding(bottom = 80.dp),
                 contentAlignment = Alignment.Center
             ) {
                 Box(
