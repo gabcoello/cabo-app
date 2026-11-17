@@ -276,7 +276,7 @@ fun ShoppingListScreen(viewModel: MainViewModel) {
                                         verticalAlignment = Alignment.CenterVertically
                                     ) {
                                         Text(
-                                            text = "${item.quantity} ${item.unit}",
+                                            text = item.formattedMeasure(),
                                             fontSize = 11.sp,
                                             fontWeight = FontWeight.SemiBold,
                                             color = TextSecondary,

@@ -74,6 +74,9 @@ dependencies {
     // Gson para serialização JSON dos itens no histórico
     implementation("com.google.code.gson:gson:2.11.0")
 
+    // ML Kit Text Recognition (OCR 100% offline no dispositivo)
+    implementation("com.google.mlkit:text-recognition:16.0.1")
+
     // WorkManager para agendamento de lembretes
     implementation("androidx.work:work-runtime-ktx:2.10.0")
 

@@ -119,6 +119,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     // Comparador de Preços (calculado a partir do histórico)
     val priceComparisons: StateFlow<List<ProductComparison>> = historyList.combine(MutableStateFlow("")) { history, _ ->
         val map = mutableMapOf<String, MutableList<ProductPriceRecord>>()
+        val displayNames = mutableMapOf<String, String>()
 
         history.forEach { purchase ->
             val type = object : TypeToken<List<PurchaseItem>>() {}.type
@@ -129,14 +130,45 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             }
 
             items.forEach { item ->
-                val key = item.name.trim().lowercase()
+                val baseKey = item.name.trim().lowercase()
+                val hasPackSpec = (item.unit == "pct" || item.unit == "cx") &&
+                    item.packageSize > 0 && item.packageSizeUnit.isNotBlank()
+
+                val packLabel = if (hasPackSpec) {
+                    val s = if (item.packageSize % 1.0 == 0.0) {
+                        item.packageSize.toInt().toString()
+                    } else {
+                        item.packageSize.toString()
+                    }
+                    "$s${item.packageSizeUnit.lowercase()}"
+                } else ""
+
+                val key = if (packLabel.isNotEmpty()) "${baseKey}__$packLabel" else baseKey
+
+                if (!displayNames.containsKey(key)) {
+                    val prettyBase = item.name.trim().replaceFirstChar { it.uppercase() }
+                    displayNames[key] = if (packLabel.isNotEmpty()) "$prettyBase ($packLabel)" else prettyBase
+                }
+
+                // Para kg / g com preço por kg informado, compara usando o preço por kg para comparação justa
+                val comparePrice = if ((item.unit == "kg" || item.unit == "g") && item.pricePerKg > 0) {
+                    item.pricePerKg
+                } else {
+                    item.price
+                }
+                val compareUnit = if ((item.unit == "kg" || item.unit == "g") && item.pricePerKg > 0) {
+                    "kg"
+                } else {
+                    item.unit
+                }
+
                 val list = map.getOrPut(key) { mutableListOf() }
                 list.add(
                     ProductPriceRecord(
                         place = purchase.place,
                         date = purchase.date,
-                        price = item.price,
-                        unit = item.unit
+                        price = comparePrice,
+                        unit = compareUnit
                     )
                 )
             }
@@ -150,7 +182,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             val allPricesEqual = validPrices.size > 1 && validPrices.map { it.price }.distinct().size == 1
 
             ProductComparison(
-                name = sorted.firstOrNull()?.let { records.first().place; key.replaceFirstChar { it.uppercase() } } ?: key,
+                name = displayNames[key] ?: key.replaceFirstChar { it.uppercase() },
                 minPrice = minPrice,
                 bestPlace = bestPlace,
                 allPricesEqual = allPricesEqual,
@@ -164,6 +196,25 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun addItem(item: ShoppingItem) {
         viewModelScope.launch {
             shoppingDao.insert(item)
+        }
+    }
+
+    fun addHistoryItemToList(prod: PurchaseItem) {
+        viewModelScope.launch {
+            shoppingDao.insert(
+                ShoppingItem(
+                    name = prod.name,
+                    quantity = prod.quantity,
+                    unit = prod.unit,
+                    price = prod.price,
+                    category = prod.category,
+                    isChecked = false,
+                    pricePerKg = prod.pricePerKg,
+                    weightAmount = prod.weightAmount,
+                    packageSize = prod.packageSize,
+                    packageSizeUnit = prod.packageSizeUnit
+                )
+            )
         }
     }
 
@@ -230,7 +281,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     quantity = it.quantity,
                     unit = it.unit,
                     price = it.price,
-                    category = it.category
+                    category = it.category,
+                    pricePerKg = it.pricePerKg,
+                    weightAmount = it.weightAmount,
+                    packageSize = it.packageSize,
+                    packageSizeUnit = it.packageSizeUnit
                 )
             }
 

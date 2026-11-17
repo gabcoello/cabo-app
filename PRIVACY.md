@@ -20,6 +20,7 @@ O **Cabô NÃO coleta, não transmite e não armazena nenhuma informação pesso
 
 ### 3. Permissões Solicitadas pelo Aplicativo
 O aplicativo solicita apenas as permissões essenciais para o seu funcionamento autônomo no dispositivo:
+- **`CAMERA`:** Utilizada exclusivamente quando o usuário opta por escanear etiquetas de produtos para preencher automaticamente o nome e o preço na lista. Todo o processamento de texto (OCR) é realizado **100% localmente no dispositivo**, sem envio, gravação ou compartilhamento de imagens com servidores externos.
 - **`POST_NOTIFICATIONS` e `SCHEDULE_EXACT_ALARM`:** Utilizadas exclusivamente para exibir notificações locais agendadas pelo próprio usuário (como lembretes de listas de compras e notificações de recarga mensal de saldo). Nenhuma informação de notificação é compartilhada externamente.
 - **`RECEIVE_BOOT_COMPLETED`:** Utilizada apenas para reagendar seus alarmes locais caso o aparelho seja reiniciado.
 

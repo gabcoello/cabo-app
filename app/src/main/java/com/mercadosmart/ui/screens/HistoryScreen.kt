@@ -1,5 +1,6 @@
 package com.mercadosmart.ui.screens
 
+import android.widget.Toast
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -8,6 +9,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AddShoppingCart
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.History
@@ -22,6 +24,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -40,6 +43,7 @@ fun HistoryScreen(
     viewModel: MainViewModel,
     onNavigateToCompare: (String) -> Unit
 ) {
+    val context = LocalContext.current
     val historyList by viewModel.historyList.collectAsState()
     var search by remember { mutableStateOf("") }
     var expandedId by remember { mutableStateOf<Long?>(null) }
@@ -208,7 +212,7 @@ fun HistoryScreen(
                                                     Text(" 🔍", fontSize = 11.sp)
                                                 }
                                                 Text(
-                                                    text = "${prod.quantity} ${prod.unit} × R$ ${String.format("%.2f", prod.price)}",
+                                                    text = prod.formattedMeasure(),
                                                     fontSize = 12.sp,
                                                     color = TextSecondary
                                                 )
@@ -217,8 +221,40 @@ fun HistoryScreen(
                                                 text = "R$ ${String.format("%.2f", prod.quantity * prod.price)}",
                                                 fontWeight = FontWeight.Bold,
                                                 fontSize = 14.sp,
-                                                color = TextPrimary
+                                                color = TextPrimary,
+                                                modifier = Modifier.padding(end = 6.dp)
                                             )
+                                            Box(
+                                                modifier = Modifier
+                                                    .clip(RoundedCornerShape(8.dp))
+                                                    .background(PrimaryLight)
+                                                    .clickable {
+                                                        viewModel.addHistoryItemToList(prod)
+                                                        Toast.makeText(
+                                                            context,
+                                                            "${prod.name} adicionado à lista!",
+                                                            Toast.LENGTH_SHORT
+                                                        ).show()
+                                                    }
+                                                    .padding(horizontal = 8.dp, vertical = 6.dp),
+                                                contentAlignment = Alignment.Center
+                                            ) {
+                                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                                    Icon(
+                                                        Icons.Default.AddShoppingCart,
+                                                        contentDescription = "Adicionar à lista",
+                                                        tint = PrimaryDark,
+                                                        modifier = Modifier.size(14.dp)
+                                                    )
+                                                    Spacer(modifier = Modifier.width(4.dp))
+                                                    Text(
+                                                        "+ Lista",
+                                                        fontSize = 11.sp,
+                                                        fontWeight = FontWeight.Bold,
+                                                        color = PrimaryDark
+                                                    )
+                                                }
+                                            }
                                         }
                                     }
 
