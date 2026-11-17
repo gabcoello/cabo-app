@@ -8,6 +8,11 @@ import com.google.mlkit.vision.text.TextRecognition
 import com.google.mlkit.vision.text.latin.TextRecognizerOptions
 import java.io.File
 
+enum class OcrScanMode {
+    WEIGHT_LABEL, // Etiqueta de peso / balança
+    SHELF_TAG     // Tarja de preço padrão de prateleira
+}
+
 data class OcrScanResult(
     val name: String = "",
     val price: String = "",
@@ -18,9 +23,13 @@ data class OcrScanResult(
 
 object OcrProductHelper {
 
-    fun createTempImageUri(context: Context): Uri {
+    fun createTempImageFile(context: Context): File {
         val dir = File(context.cacheDir, "ocr_images").apply { mkdirs() }
-        val file = File(dir, "scan_${System.currentTimeMillis()}.jpg")
+        return File(dir, "scan_${System.currentTimeMillis()}.jpg")
+    }
+
+    fun createTempImageUri(context: Context): Uri {
+        val file = createTempImageFile(context)
         return FileProvider.getUriForFile(
             context,
             "${context.packageName}.fileprovider",
@@ -31,6 +40,7 @@ object OcrProductHelper {
     fun recognizeProductFromUri(
         context: Context,
         uri: Uri,
+        scanMode: OcrScanMode = OcrScanMode.SHELF_TAG,
         onResult: (OcrScanResult) -> Unit,
         onError: (String) -> Unit
     ) {
@@ -40,7 +50,7 @@ object OcrProductHelper {
 
             recognizer.process(image)
                 .addOnSuccessListener { visionText ->
-                    val parsed = parseTextToProduct(visionText.text)
+                    val parsed = parseTextToProduct(visionText.text, scanMode)
                     onResult(parsed)
                 }
                 .addOnFailureListener { e ->
@@ -55,7 +65,10 @@ object OcrProductHelper {
      * Extrai nome provável, preço e peso a partir do texto bruto reconhecido na etiqueta/produto,
      * desconsiderando linhas de data, validade, fabricação, lote e tara.
      */
-    internal fun parseTextToProduct(rawText: String): OcrScanResult {
+    internal fun parseTextToProduct(
+        rawText: String,
+        scanMode: OcrScanMode = OcrScanMode.SHELF_TAG
+    ): OcrScanResult {
         if (rawText.isBlank()) return OcrScanResult()
 
         val lines = rawText.lines()
@@ -63,7 +76,7 @@ object OcrProductHelper {
             .filter { it.isNotBlank() }
 
         val fullLower = rawText.lowercase()
-        val isPerKg = fullLower.contains("/kg") ||
+        val detectedPerKgText = fullLower.contains("/kg") ||
             fullLower.contains("o kg") ||
             fullLower.contains("por kg") ||
             fullLower.contains("r$/kg") ||
@@ -174,10 +187,16 @@ object OcrProductHelper {
             .trim()
             .take(50)
 
+        val finalIsPerKg = if (scanMode == OcrScanMode.WEIGHT_LABEL) {
+            detectedPerKgText || extractedWeight.isNotBlank()
+        } else {
+            detectedPerKgText
+        }
+
         return OcrScanResult(
             name = bestName,
             price = extractedPrice,
-            isPerKg = isPerKg,
+            isPerKg = finalIsPerKg,
             weightAmount = extractedWeight,
             weightUnit = extractedWeightUnit
         )
