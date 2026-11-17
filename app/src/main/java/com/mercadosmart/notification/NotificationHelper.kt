@@ -135,19 +135,51 @@ class BootReceiver : BroadcastReceiver() {
 
 object AlarmScheduler {
     private fun scheduleExact(alarmManager: AlarmManager, triggerAtMillis: Long, pendingIntent: PendingIntent) {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            alarmManager.setExactAndAllowWhileIdle(
-                AlarmManager.RTC_WAKEUP,
-                triggerAtMillis,
-                pendingIntent
-            )
-        } else {
-            alarmManager.setExact(
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && !alarmManager.canScheduleExactAlarms()) {
+                alarmManager.setAndAllowWhileIdle(
+                    AlarmManager.RTC_WAKEUP,
+                    triggerAtMillis,
+                    pendingIntent
+                )
+                return
+            }
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                alarmManager.setExactAndAllowWhileIdle(
+                    AlarmManager.RTC_WAKEUP,
+                    triggerAtMillis,
+                    pendingIntent
+                )
+            } else {
+                alarmManager.setExact(
+                    AlarmManager.RTC_WAKEUP,
+                    triggerAtMillis,
+                    pendingIntent
+                )
+            }
+        } catch (_: SecurityException) {
+            alarmManager.setAndAllowWhileIdle(
                 AlarmManager.RTC_WAKEUP,
                 triggerAtMillis,
                 pendingIntent
             )
         }
+    }
+
+    internal fun parseHourMinute(timeStr: String): Pair<Int, Int> {
+        val clean = timeStr.trim().lowercase()
+        val match = Regex("""(\d{1,2})\s*[:h.]\s*(\d{1,2})?""").find(clean)
+        val hours = if (match != null) {
+            match.groupValues[1].toIntOrNull()?.coerceIn(0, 23) ?: 9
+        } else {
+            clean.filter { it.isDigit() }.take(2).toIntOrNull()?.coerceIn(0, 23) ?: 9
+        }
+        val minutes = if (match != null && match.groupValues[2].isNotBlank()) {
+            match.groupValues[2].toIntOrNull()?.coerceIn(0, 59) ?: 0
+        } else {
+            0
+        }
+        return hours to minutes
     }
 
     fun scheduleReminder(context: Context, reminder: Reminder) {
@@ -166,9 +198,8 @@ object AlarmScheduler {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
-        val parts = reminder.time.split(":")
-        val hours = parts.getOrNull(0)?.toIntOrNull() ?: 9
-        val minutes = parts.getOrNull(1)?.toIntOrNull() ?: 0
+        val (hours, minutes) = parseHourMinute(reminder.time)
+        val nowMillis = System.currentTimeMillis()
 
         val calendar = Calendar.getInstance().apply {
             set(Calendar.HOUR_OF_DAY, hours)
@@ -177,21 +208,30 @@ object AlarmScheduler {
             set(Calendar.MILLISECOND, 0)
 
             val dayMap = mapOf(
-                "Domingo" to Calendar.SUNDAY,
-                "Segunda" to Calendar.MONDAY,
-                "Terça" to Calendar.TUESDAY,
-                "Quarta" to Calendar.WEDNESDAY,
-                "Quinta" to Calendar.THURSDAY,
-                "Sexta" to Calendar.FRIDAY,
-                "Sábado" to Calendar.SATURDAY
+                "domingo" to Calendar.SUNDAY,
+                "segunda" to Calendar.MONDAY,
+                "terça" to Calendar.TUESDAY,
+                "terca" to Calendar.TUESDAY,
+                "quarta" to Calendar.WEDNESDAY,
+                "quinta" to Calendar.THURSDAY,
+                "sexta" to Calendar.FRIDAY,
+                "sábado" to Calendar.SATURDAY,
+                "sabado" to Calendar.SATURDAY
             )
 
-            val targetDay = dayMap[reminder.dayOfWeek]
+            val targetDay = dayMap[reminder.dayOfWeek.trim().lowercase()]
             if (targetDay != null) {
-                while (get(Calendar.DAY_OF_WEEK) != targetDay || timeInMillis <= System.currentTimeMillis()) {
-                    add(Calendar.DAY_OF_YEAR, 1)
+                // Considera hoje se o dia da semana coincidir e o horário ainda não tiver passado
+                if (get(Calendar.DAY_OF_WEEK) != targetDay || timeInMillis <= nowMillis) {
+                    if (get(Calendar.DAY_OF_WEEK) == targetDay && timeInMillis <= nowMillis) {
+                        add(Calendar.DAY_OF_YEAR, 7)
+                    } else {
+                        while (get(Calendar.DAY_OF_WEEK) != targetDay) {
+                            add(Calendar.DAY_OF_YEAR, 1)
+                        }
+                    }
                 }
-            } else if (timeInMillis <= System.currentTimeMillis()) {
+            } else if (timeInMillis <= nowMillis) {
                 add(Calendar.DAY_OF_YEAR, 1)
             }
         }

@@ -533,6 +533,17 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    fun updateReminder(reminder: Reminder) {
+        viewModelScope.launch {
+            reminderDao.update(reminder)
+            if (reminder.isActive) {
+                AlarmScheduler.scheduleReminder(getApplication(), reminder)
+            } else {
+                AlarmScheduler.cancelReminder(getApplication(), reminder)
+            }
+        }
+    }
+
     fun toggleReminder(reminder: Reminder) {
         viewModelScope.launch {
             val newActive = !reminder.isActive
