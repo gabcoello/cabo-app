@@ -1,6 +1,7 @@
 package com.mercadosmart.ui.screens
 
 import android.Manifest
+import android.app.TimePickerDialog
 import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -19,20 +20,24 @@ import androidx.compose.material.icons.filled.Alarm
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.NotificationsOff
+import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import com.mercadosmart.data.model.Reminder
+import com.mercadosmart.notification.AlarmScheduler
 import com.mercadosmart.ui.theme.*
 import com.mercadosmart.viewmodel.MainViewModel
 import java.util.Calendar
@@ -41,6 +46,7 @@ import java.util.Calendar
 fun RemindersScreen(viewModel: MainViewModel) {
     val reminders by viewModel.reminders.collectAsState()
     var showDialog by remember { mutableStateOf(false) }
+    var reminderToEdit by remember { mutableStateOf<Reminder?>(null) }
 
     // Launcher de permissão de notificação Android 13+
     val permissionLauncher = rememberLauncherForActivityResult(
@@ -105,7 +111,12 @@ fun RemindersScreen(viewModel: MainViewModel) {
                             shape = RoundedCornerShape(14.dp),
                             colors = CardDefaults.cardColors(containerColor = Surface),
                             border = androidx.compose.foundation.BorderStroke(1.dp, Border),
-                            modifier = Modifier.fillMaxWidth()
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    reminderToEdit = reminder
+                                    showDialog = true
+                                }
                         ) {
                             Row(
                                 modifier = Modifier
@@ -164,7 +175,20 @@ fun RemindersScreen(viewModel: MainViewModel) {
                                     }
                                 }
 
-                                IconButton(onClick = { viewModel.deleteReminder(reminder) }) {
+                                IconButton(
+                                    onClick = {
+                                        reminderToEdit = reminder
+                                        showDialog = true
+                                    },
+                                    modifier = Modifier.size(34.dp)
+                                ) {
+                                    Icon(Icons.Default.Edit, contentDescription = "Editar", tint = PrimaryDark, modifier = Modifier.size(18.dp))
+                                }
+
+                                IconButton(
+                                    onClick = { viewModel.deleteReminder(reminder) },
+                                    modifier = Modifier.size(34.dp)
+                                ) {
                                     Icon(Icons.Default.Delete, contentDescription = "Deletar", tint = Danger, modifier = Modifier.size(18.dp))
                                 }
                             }
@@ -182,7 +206,10 @@ fun RemindersScreen(viewModel: MainViewModel) {
                 .padding(16.dp)
         ) {
             Button(
-                onClick = { showDialog = true },
+                onClick = {
+                    reminderToEdit = null
+                    showDialog = true
+                },
                 shape = RoundedCornerShape(14.dp),
                 colors = ButtonDefaults.buttonColors(containerColor = Primary),
                 modifier = Modifier
@@ -195,13 +222,22 @@ fun RemindersScreen(viewModel: MainViewModel) {
             }
         }
 
-        // Diálogo de criação
+        // Diálogo de criação / edição
         if (showDialog) {
-            AddReminderDialog(
-                onDismiss = { showDialog = false },
-                onSave = {
-                    viewModel.addReminder(it)
+            ReminderDialog(
+                reminderToEdit = reminderToEdit,
+                onDismiss = {
                     showDialog = false
+                    reminderToEdit = null
+                },
+                onSave = { saved ->
+                    if (reminderToEdit == null) {
+                        viewModel.addReminder(saved)
+                    } else {
+                        viewModel.updateReminder(saved)
+                    }
+                    showDialog = false
+                    reminderToEdit = null
                 }
             )
         }
@@ -209,22 +245,25 @@ fun RemindersScreen(viewModel: MainViewModel) {
 }
 
 @Composable
-fun AddReminderDialog(
+fun ReminderDialog(
+    reminderToEdit: Reminder? = null,
     onDismiss: () -> Unit,
     onSave: (Reminder) -> Unit
 ) {
-    var title by remember { mutableStateOf("") }
+    val context = LocalContext.current
+    var title by remember { mutableStateOf(reminderToEdit?.title ?: "") }
     val daysOfWeek = listOf("Domingo", "Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado")
     val todayIdx = remember { Calendar.getInstance().get(Calendar.DAY_OF_WEEK) - 1 }
-    var selectedDay by remember { mutableStateOf(daysOfWeek.getOrElse(todayIdx) { "Sábado" }) }
+    val todayName = daysOfWeek.getOrElse(todayIdx) { "Sábado" }
+    var selectedDay by remember { mutableStateOf(reminderToEdit?.dayOfWeek ?: todayName) }
 
-    // Sugere hora atual + 5 minutos
+    // Sugere hora atual + 5 minutos quando for novo
     val defaultTime = remember {
         val cal = Calendar.getInstance().apply { add(Calendar.MINUTE, 5) }
         String.format("%02d:%02d", cal.get(Calendar.HOUR_OF_DAY), cal.get(Calendar.MINUTE))
     }
-    var time by remember { mutableStateOf(defaultTime) }
-    var note by remember { mutableStateOf("") }
+    var time by remember { mutableStateOf(reminderToEdit?.time ?: defaultTime) }
+    var note by remember { mutableStateOf(reminderToEdit?.note ?: "") }
 
     Dialog(onDismissRequest = onDismiss) {
         Card(
@@ -238,7 +277,10 @@ fun AddReminderDialog(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text("Criar Lembrete", style = MaterialTheme.typography.titleLarge)
+                    Text(
+                        text = if (reminderToEdit == null) "Criar Lembrete" else "Editar Lembrete",
+                        style = MaterialTheme.typography.titleLarge
+                    )
                     IconButton(onClick = onDismiss) {
                         Icon(Icons.Default.Close, contentDescription = "Fechar", tint = TextSecondary)
                     }
@@ -292,10 +334,35 @@ fun AddReminderDialog(
                     value = time,
                     onValueChange = { time = it },
                     placeholder = { Text("09:00", color = TextMuted) },
+                    trailingIcon = {
+                        IconButton(onClick = {
+                            val (h, m) = AlarmScheduler.parseHourMinute(time)
+                            TimePickerDialog(
+                                context,
+                                { _, pickedHour, pickedMinute ->
+                                    time = String.format("%02d:%02d", pickedHour, pickedMinute)
+                                },
+                                h,
+                                m,
+                                true
+                            ).show()
+                        }) {
+                            Icon(Icons.Default.Schedule, contentDescription = "Escolher horário", tint = PrimaryDark)
+                        }
+                    },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(12.dp)
                 )
+
+                if (selectedDay == todayName) {
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = "Hoje é $todayName: se o horário ainda não passou, despertará hoje.",
+                        fontSize = 11.sp,
+                        color = PrimaryDark
+                    )
+                }
 
                 Spacer(modifier = Modifier.height(10.dp))
 
@@ -313,11 +380,18 @@ fun AddReminderDialog(
                 Button(
                     onClick = {
                         if (title.isNotBlank()) {
+                            val (h, m) = AlarmScheduler.parseHourMinute(time)
+                            val normalizedTime = String.format("%02d:%02d", h, m)
                             onSave(
-                                Reminder(
+                                reminderToEdit?.copy(
                                     title = title.trim(),
                                     dayOfWeek = selectedDay,
-                                    time = time.trim(),
+                                    time = normalizedTime,
+                                    note = note.trim()
+                                ) ?: Reminder(
+                                    title = title.trim(),
+                                    dayOfWeek = selectedDay,
+                                    time = normalizedTime,
                                     note = note.trim(),
                                     isActive = true
                                 )
@@ -329,7 +403,11 @@ fun AddReminderDialog(
                     colors = ButtonDefaults.buttonColors(containerColor = Primary),
                     modifier = Modifier.fillMaxWidth().height(48.dp)
                 ) {
-                    Text("Salvar e Ativar Alarme", fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                    Text(
+                        text = if (reminderToEdit == null) "Salvar e Ativar Alarme" else "Salvar Alterações",
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 14.sp
+                    )
                 }
             }
         }
