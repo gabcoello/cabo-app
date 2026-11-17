@@ -130,9 +130,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             }
 
             items.forEach { item ->
-                val baseKey = item.name.trim().lowercase()
-                val hasPackSpec = (item.unit == "pct" || item.unit == "cx") &&
-                    item.packageSize > 0 && item.packageSizeUnit.isNotBlank()
+                val safeName = (item.name as String?).orEmpty()
+                val safeUnit = (item.unit as String?).orEmpty().ifBlank { "un" }
+                val safePkgUnit = item.packageSizeUnit.orEmpty()
+
+                val baseKey = safeName.trim().lowercase()
+                val hasPackSpec = (safeUnit == "pct" || safeUnit == "cx") &&
+                    item.packageSize > 0 && safePkgUnit.isNotBlank()
 
                 val packLabel = if (hasPackSpec) {
                     val s = if (item.packageSize % 1.0 == 0.0) {
@@ -140,26 +144,26 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     } else {
                         item.packageSize.toString()
                     }
-                    "$s${item.packageSizeUnit.lowercase()}"
+                    "$s${safePkgUnit.lowercase()}"
                 } else ""
 
                 val key = if (packLabel.isNotEmpty()) "${baseKey}__$packLabel" else baseKey
 
                 if (!displayNames.containsKey(key)) {
-                    val prettyBase = item.name.trim().replaceFirstChar { it.uppercase() }
+                    val prettyBase = safeName.trim().replaceFirstChar { it.uppercase() }
                     displayNames[key] = if (packLabel.isNotEmpty()) "$prettyBase ($packLabel)" else prettyBase
                 }
 
                 // Para kg / g com preço por kg informado, compara usando o preço por kg para comparação justa
-                val comparePrice = if ((item.unit == "kg" || item.unit == "g") && item.pricePerKg > 0) {
+                val comparePrice = if ((safeUnit == "kg" || safeUnit == "g") && item.pricePerKg > 0) {
                     item.pricePerKg
                 } else {
                     item.price
                 }
-                val compareUnit = if ((item.unit == "kg" || item.unit == "g") && item.pricePerKg > 0) {
+                val compareUnit = if ((safeUnit == "kg" || safeUnit == "g") && item.pricePerKg > 0) {
                     "kg"
                 } else {
-                    item.unit
+                    safeUnit
                 }
 
                 val list = map.getOrPut(key) { mutableListOf() }
@@ -203,16 +207,16 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             shoppingDao.insert(
                 ShoppingItem(
-                    name = prod.name,
-                    quantity = prod.quantity,
-                    unit = prod.unit,
+                    name = (prod.name as String?).orEmpty().ifBlank { "Item" },
+                    quantity = if (prod.quantity > 0) prod.quantity else 1.0,
+                    unit = (prod.unit as String?).orEmpty().ifBlank { "un" },
                     price = prod.price,
-                    category = prod.category,
+                    category = (prod.category as String?).orEmpty().ifBlank { "Outros" },
                     isChecked = false,
                     pricePerKg = prod.pricePerKg,
                     weightAmount = prod.weightAmount,
                     packageSize = prod.packageSize,
-                    packageSizeUnit = prod.packageSizeUnit
+                    packageSizeUnit = prod.packageSizeUnit.orEmpty()
                 )
             )
         }
@@ -502,12 +506,16 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
             val shoppingItems = items.map {
                 ShoppingItem(
-                    name = it.name,
-                    quantity = it.quantity,
-                    unit = it.unit,
+                    name = (it.name as String?).orEmpty().ifBlank { "Item" },
+                    quantity = if (it.quantity > 0) it.quantity else 1.0,
+                    unit = (it.unit as String?).orEmpty().ifBlank { "un" },
                     price = it.price,
-                    category = it.category,
-                    isChecked = false
+                    category = (it.category as String?).orEmpty().ifBlank { "Outros" },
+                    isChecked = false,
+                    pricePerKg = it.pricePerKg,
+                    weightAmount = it.weightAmount,
+                    packageSize = it.packageSize,
+                    packageSizeUnit = it.packageSizeUnit.orEmpty()
                 )
             }
             shoppingDao.insertAll(shoppingItems)
