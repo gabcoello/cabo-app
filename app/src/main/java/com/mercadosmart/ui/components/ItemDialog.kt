@@ -101,16 +101,32 @@ fun ItemDialog(
                 onResult = { result ->
                     isScanning = false
                     if (result.name.isNotBlank()) name = result.name
+
+                    if (result.weightAmount.isNotBlank()) {
+                        unit = result.weightUnit.ifBlank { "kg" }
+                        weightAmountStr = result.weightAmount
+                    }
+
                     if (result.price.isNotBlank()) {
                         if (result.isPerKg) {
-                            unit = "kg"
+                            if (unit != "kg" && unit != "g") unit = "kg"
                             pricePerKgStr = result.price
+                        } else if (result.weightAmount.isNotBlank()) {
+                            // Etiqueta com peso e preço total sem "/kg": calcula o valor/kg equivalente
+                            val p = result.price.toDoubleOrNull()
+                            val w = result.weightAmount.toDoubleOrNull()
+                            if (p != null && w != null && w > 0) {
+                                val kgWeight = if (result.weightUnit == "g") w / 1000.0 else w
+                                pricePerKgStr = String.format(java.util.Locale.US, "%.2f", p / kgWeight)
+                            }
+                            price = result.price
                         } else {
                             price = result.price
                         }
                     }
-                    scanFeedback = if (result.name.isBlank() && result.price.isBlank()) {
-                        "Não foi possível identificar nome ou preço. Tente aproximar mais da etiqueta."
+
+                    scanFeedback = if (result.name.isBlank() && result.price.isBlank() && result.weightAmount.isBlank()) {
+                        "Não foi possível identificar informações. Tente aproximar mais da etiqueta."
                     } else {
                         "Campos preenchidos! Confira e edite se necessário."
                     }
