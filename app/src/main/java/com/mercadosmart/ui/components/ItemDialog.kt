@@ -83,66 +83,13 @@ fun ItemDialog(
         mutableStateOf(itemToEdit?.packageSizeUnit?.ifBlank { null } ?: if (unit == "cx") "un" else "g")
     }
 
-    // Estado de OCR pela câmera
+    // Estado de OCR pela câmera com guias
+    var showCameraDialog by remember { mutableStateOf(false) }
     var isScanning by remember { mutableStateOf(false) }
     var scanFeedback by remember { mutableStateOf<String?>(null) }
-    var pendingPhotoUri by remember { mutableStateOf<Uri?>(null) }
-
-    val takePictureLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.TakePicture()
-    ) { success ->
-        val uri = pendingPhotoUri
-        if (success && uri != null) {
-            isScanning = true
-            scanFeedback = null
-            OcrProductHelper.recognizeProductFromUri(
-                context = context,
-                uri = uri,
-                onResult = { result ->
-                    isScanning = false
-                    if (result.name.isNotBlank()) name = result.name
-
-                    if (result.weightAmount.isNotBlank()) {
-                        unit = result.weightUnit.ifBlank { "kg" }
-                        weightAmountStr = result.weightAmount
-                    }
-
-                    if (result.price.isNotBlank()) {
-                        if (result.isPerKg) {
-                            if (unit != "kg" && unit != "g") unit = "kg"
-                            pricePerKgStr = result.price
-                        } else if (result.weightAmount.isNotBlank()) {
-                            // Etiqueta com peso e preço total sem "/kg": calcula o valor/kg equivalente
-                            val p = result.price.toDoubleOrNull()
-                            val w = result.weightAmount.toDoubleOrNull()
-                            if (p != null && w != null && w > 0) {
-                                val kgWeight = if (result.weightUnit == "g") w / 1000.0 else w
-                                pricePerKgStr = String.format(java.util.Locale.US, "%.2f", p / kgWeight)
-                            }
-                            price = result.price
-                        } else {
-                            price = result.price
-                        }
-                    }
-
-                    scanFeedback = if (result.name.isBlank() && result.price.isBlank() && result.weightAmount.isBlank()) {
-                        "Não foi possível identificar informações. Tente aproximar mais da etiqueta."
-                    } else {
-                        "Campos preenchidos! Confira e edite se necessário."
-                    }
-                },
-                onError = { err ->
-                    isScanning = false
-                    scanFeedback = "Erro ao ler etiqueta: $err"
-                }
-            )
-        }
-    }
 
     val launchCamera = {
-        val uri = OcrProductHelper.createTempImageUri(context)
-        pendingPhotoUri = uri
-        takePictureLauncher.launch(uri)
+        showCameraDialog = true
     }
 
     val permissionLauncher = rememberLauncherForActivityResult(
@@ -153,6 +100,62 @@ fun ItemDialog(
         } else {
             scanFeedback = "Permissão de câmera necessária para escanear produtos."
         }
+    }
+
+    if (showCameraDialog) {
+        ScannerCameraDialog(
+            onDismiss = { showCameraDialog = false },
+            onCaptured = { uri, scanMode ->
+                showCameraDialog = false
+                isScanning = true
+                scanFeedback = null
+                OcrProductHelper.recognizeProductFromUri(
+                    context = context,
+                    uri = uri,
+                    scanMode = scanMode,
+                    onResult = { result ->
+                        isScanning = false
+                        if (result.name.isNotBlank()) name = result.name
+
+                        if (result.weightAmount.isNotBlank()) {
+                            unit = result.weightUnit.ifBlank { "kg" }
+                            weightAmountStr = result.weightAmount
+                        }
+
+                        if (result.price.isNotBlank()) {
+                            if (result.isPerKg) {
+                                if (unit != "kg" && unit != "g") unit = "kg"
+                                pricePerKgStr = result.price
+                            } else if (result.weightAmount.isNotBlank()) {
+                                val p = result.price.toDoubleOrNull()
+                                val w = result.weightAmount.toDoubleOrNull()
+                                if (p != null && w != null && w > 0) {
+                                    val kgWeight = if (result.weightUnit == "g") w / 1000.0 else w
+                                    pricePerKgStr = String.format(java.util.Locale.US, "%.2f", p / kgWeight)
+                                }
+                                price = result.price
+                            } else {
+                                price = result.price
+                            }
+                        }
+
+                        scanFeedback = if (result.name.isBlank() && result.price.isBlank() && result.weightAmount.isBlank()) {
+                            "Não foi possível identificar informações. Tente aproximar mais da etiqueta."
+                        } else {
+                            "Campos preenchidos! Confira e edite se necessário."
+                        }
+                    },
+                    onError = { err ->
+                        isScanning = false
+                        scanFeedback = "Erro ao ler etiqueta: $err"
+                    }
+                )
+            },
+            onError = { err ->
+                showCameraDialog = false
+                scanFeedback = "Erro na câmera: $err"
+            }
+        )
     }
 
     val units = listOf("un", "kg", "g", "L", "ml", "pct", "cx")
