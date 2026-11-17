@@ -8,28 +8,19 @@ import com.google.mlkit.vision.text.TextRecognition
 import com.google.mlkit.vision.text.latin.TextRecognizerOptions
 import java.io.File
 
-enum class OcrScanMode {
-    WEIGHT_LABEL, // Etiqueta de peso / balança
-    SHELF_TAG     // Tarja de preço padrão de prateleira
-}
-
 data class OcrScanResult(
     val name: String = "",
     val price: String = "",
-    val isPerKg: Boolean = false,
+    val pricePerKg: String = "",
     val weightAmount: String = "",
     val weightUnit: String = ""
 )
 
 object OcrProductHelper {
 
-    fun createTempImageFile(context: Context): File {
-        val dir = File(context.cacheDir, "ocr_images").apply { mkdirs() }
-        return File(dir, "scan_${System.currentTimeMillis()}.jpg")
-    }
-
     fun createTempImageUri(context: Context): Uri {
-        val file = createTempImageFile(context)
+        val dir = File(context.cacheDir, "ocr_images").apply { mkdirs() }
+        val file = File(dir, "scan_${System.currentTimeMillis()}.jpg")
         return FileProvider.getUriForFile(
             context,
             "${context.packageName}.fileprovider",
@@ -40,7 +31,6 @@ object OcrProductHelper {
     fun recognizeProductFromUri(
         context: Context,
         uri: Uri,
-        scanMode: OcrScanMode = OcrScanMode.SHELF_TAG,
         onResult: (OcrScanResult) -> Unit,
         onError: (String) -> Unit
     ) {
@@ -50,7 +40,7 @@ object OcrProductHelper {
 
             recognizer.process(image)
                 .addOnSuccessListener { visionText ->
-                    val parsed = parseTextToProduct(visionText.text, scanMode)
+                    val parsed = parseTextToProduct(visionText.text)
                     onResult(parsed)
                 }
                 .addOnFailureListener { e ->
@@ -62,54 +52,51 @@ object OcrProductHelper {
     }
 
     /**
-     * Extrai nome provável, preço e peso a partir do texto bruto reconhecido na etiqueta/produto,
-     * desconsiderando linhas de data, validade, fabricação, lote e tara.
+     * Extrai exclusivamente:
+     * 1. Descrição do produto (1 ou mais palavras válidas)
+     * 2. Peso (kg ou g)
+     * 3. Preço por kg (R$/kg ou /kg)
+     * 4. Valor com R$ na frente
+     * Ignora todo o restante (data, validade, valido ate, embalado em, fabricacao, lote, tara, codigo de barras).
      */
-    internal fun parseTextToProduct(
-        rawText: String,
-        scanMode: OcrScanMode = OcrScanMode.SHELF_TAG
-    ): OcrScanResult {
+    internal fun parseTextToProduct(rawText: String): OcrScanResult {
         if (rawText.isBlank()) return OcrScanResult()
 
         val lines = rawText.lines()
             .map { it.trim() }
             .filter { it.isNotBlank() }
 
-        val fullLower = rawText.lowercase()
-        val detectedPerKgText = fullLower.contains("/kg") ||
-            fullLower.contains("o kg") ||
-            fullLower.contains("por kg") ||
-            fullLower.contains("r$/kg") ||
-            (Regex("""\bkg\b""").containsMatchIn(fullLower) && fullLower.contains("r$"))
+        // 1. Preço por kg: "R$/kg: 49,50", "/kg: 49,50" ou "49,50 /kg"
+        val afterPerKgRegex = Regex(
+            """(?:r\$\s*/\s*kg|/\s*kg|por\s*kg|o\s*kg)\s*[:=]?\s*(\d{1,4}[.,]\d{2})""",
+            RegexOption.IGNORE_CASE
+        )
+        val beforePerKgRegex = Regex(
+            """(\d{1,4}[.,]\d{2})\s*(?:/\s*kg|por\s*kg|o\s*kg)""",
+            RegexOption.IGNORE_CASE
+        )
 
-        // 1. Buscar preço: prioriza valor por kg se indicado, ou padrão com R$, ou primeiro decimal válido
-        val currencyRegex = Regex("""R\$\s*(\d{1,4}[.,]\d{2})""", RegexOption.IGNORE_CASE)
-        val perKgPriceRegex = Regex("""(\d{1,4}[.,]\d{2})\s*(?:/\s*kg|por\s*kg|o\s*kg)""", RegexOption.IGNORE_CASE)
-        val decimalRegex = Regex("""(?<!\d)(\d{1,4}[.,]\d{2})(?!\d)""")
-
-        var extractedPrice = ""
-        val perKgMatch = perKgPriceRegex.find(rawText)
-        if (perKgMatch != null) {
-            extractedPrice = perKgMatch.groupValues[1].replace(",", ".")
+        var extractedPricePerKg = ""
+        val afterPerKgMatch = afterPerKgRegex.find(rawText)
+        if (afterPerKgMatch != null) {
+            extractedPricePerKg = afterPerKgMatch.groupValues[1].replace(",", ".")
         } else {
-            val currencyMatch = currencyRegex.find(rawText)
-            if (currencyMatch != null) {
-                extractedPrice = currencyMatch.groupValues[1].replace(",", ".")
-            } else {
-                val candidates = decimalRegex.findAll(rawText)
-                    .map { it.groupValues[1].replace(",", ".") }
-                    .filter {
-                        val v = it.toDoubleOrNull() ?: 0.0
-                        v in 0.10..5000.0
-                    }
-                    .toList()
-                if (candidates.isNotEmpty()) {
-                    extractedPrice = candidates.first()
-                }
+            val beforePerKgMatch = beforePerKgRegex.find(rawText)
+            if (beforePerKgMatch != null) {
+                extractedPricePerKg = beforePerKgMatch.groupValues[1].replace(",", ".")
             }
         }
 
-        // 2. Buscar peso (kg ou g), ignorando linhas de tara e linhas de preço/kg
+        // 2. Valor com R$ na frente (excluindo R$/kg)
+        val currencyRegex = Regex("""R\$(?!\s*/\s*kg)\s*[:=]?\s*(\d{1,4}[.,]\d{2})""", RegexOption.IGNORE_CASE)
+        var extractedPrice = ""
+        val currencyMatches = currencyRegex.findAll(rawText).toList()
+        if (currencyMatches.isNotEmpty()) {
+            // Se houver mais de um R$, pega o último (geralmente TOTAL R$) ou o primeiro válido
+            extractedPrice = currencyMatches.last().groupValues[1].replace(",", ".")
+        }
+
+        // 3. Peso (kg ou g), ignorando tara e linhas de preço/kg
         var extractedWeight = ""
         var extractedWeightUnit = ""
 
@@ -148,55 +135,40 @@ object OcrProductHelper {
             }
         }
 
-        // 3. Buscar nome provável do produto, desconsiderando data, validade, fabricação, lote, tara etc.
+        // 4. Descrição do produto (1 ou mais palavras), ignorando todo o resto
         val ignoredLineTerms = listOf(
-            "data", "validade", "val.", "val:", "fabricacao", "fabricação", "fab.", "fab:",
-            "lote", "tara", "embalado", "vencimento", "venc.", "venc:", "peso liq",
-            "peso líquido", "peso bruto", "cnpj", "cod.", "código", "codigo"
+            "data", "validade", "valido", "válido", "val.", "val:", "fabricacao", "fabricação",
+            "fab.", "fab:", "embalado", "lote", "tara", "vencimento", "venc.", "venc:",
+            "peso", "total", "r$", "/kg", "cnpj", "cpf", "cod.", "código", "codigo",
+            "oferta", "promocao", "promoção", "atacado", "varejo"
         )
         val dateRegex = Regex("""\b\d{1,2}[/-]\d{1,2}[/-]\d{2,4}\b""")
-
-        val noiseWords = setOf(
-            "r$", "oferta", "promocao", "promoção", "preco", "preço", "por", "de",
-            "atacado", "varejo", "clube", "fidelidade", "unidade", "un", "kg", "g",
-            "data", "validade", "val", "fabricacao", "fabricação", "fab", "lote", "tara",
-            "peso", "cod", "código", "codigo", "economize", "desconto", "vencimento"
-        )
+        val decimalRegex = Regex("""(?<!\d)\d{1,4}[.,]\d{2}(?!\d)""")
 
         val candidateLines = lines.filter { line ->
             val lower = line.lowercase()
             val hasLetters = line.any { it.isLetter() }
-            val isMostlyPrice = currencyRegex.matches(line) || decimalRegex.matches(line)
-            val isBarcode = line.count { it.isDigit() } >= 8 && !hasLetters
+            val isBarcode = line.count { it.isDigit() } >= 7
             val hasIgnoredMetadata = ignoredLineTerms.any { term -> lower.contains(term) }
             val hasDatePattern = dateRegex.containsMatchIn(line)
-            val isWeightOnlyLine = genericWeightRegex.matches(line)
-            val isOnlyNoise = lower.split(Regex("\\s+")).all { token ->
-                val clean = token.trim('.', ',', ':', ';', '-', '/')
-                clean.isEmpty() || clean in noiseWords || clean.all { it.isDigit() }
-            }
-            hasLetters && !isMostlyPrice && !isBarcode && !hasIgnoredMetadata &&
-                !hasDatePattern && !isWeightOnlyLine && !isOnlyNoise && line.length >= 3
+            val isMostlyNumberOrPrice = decimalRegex.matches(line) || genericWeightRegex.matches(line)
+            val wordCount = line.split(Regex("\\s+")).count { token -> token.any { it.isLetter() } }
+
+            hasLetters && wordCount >= 1 && !isBarcode && !hasIgnoredMetadata &&
+                !hasDatePattern && !isMostlyNumberOrPrice && line.length >= 3
         }
 
         val bestName = candidateLines
-            .take(2)
-            .joinToString(" ")
-            .replace(Regex("""R\$\s*\d+[.,]\d{2}""", RegexOption.IGNORE_CASE), "")
+            .firstOrNull()
+            .orEmpty()
             .replace(Regex("""\s+"""), " ")
             .trim()
             .take(50)
 
-        val finalIsPerKg = if (scanMode == OcrScanMode.WEIGHT_LABEL) {
-            detectedPerKgText || extractedWeight.isNotBlank()
-        } else {
-            detectedPerKgText
-        }
-
         return OcrScanResult(
             name = bestName,
             price = extractedPrice,
-            isPerKg = finalIsPerKg,
+            pricePerKg = extractedPricePerKg,
             weightAmount = extractedWeight,
             weightUnit = extractedWeightUnit
         )

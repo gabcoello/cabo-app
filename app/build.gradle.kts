@@ -77,13 +77,6 @@ dependencies {
     // ML Kit Text Recognition (OCR 100% offline no dispositivo)
     implementation("com.google.mlkit:text-recognition:16.0.1")
 
-    // CameraX para câmera com guias visuais de enquadramento
-    val cameraxVersion = "1.4.1"
-    implementation("androidx.camera:camera-core:$cameraxVersion")
-    implementation("androidx.camera:camera-camera2:$cameraxVersion")
-    implementation("androidx.camera:camera-lifecycle:$cameraxVersion")
-    implementation("androidx.camera:camera-view:$cameraxVersion")
-
     // WorkManager para agendamento de lembretes
     implementation("androidx.work:work-runtime-ktx:2.10.0")
 
