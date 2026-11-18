@@ -93,7 +93,7 @@ class ReminderReceiver : BroadcastReceiver() {
                             .getAllOnce()
                             .firstOrNull { it.id == reminderId && it.isActive }
                         if (reminder != null) {
-                            AlarmScheduler.scheduleReminder(context, reminder)
+                            AlarmScheduler.scheduleReminder(context, reminder, skipCurrentMinute = true)
                         }
                     } finally {
                         pendingResult.finish()
@@ -214,60 +214,93 @@ object AlarmScheduler {
     internal fun parseHourMinute(timeStr: String): Pair<Int, Int> {
         val clean = timeStr.trim().lowercase()
         val match = Regex("""(\d{1,2})\s*[:h.]\s*(\d{1,2})?""").find(clean)
-        val hours = if (match != null) {
-            match.groupValues[1].toIntOrNull()?.coerceIn(0, 23) ?: 9
-        } else {
-            clean.filter { it.isDigit() }.take(2).toIntOrNull()?.coerceIn(0, 23) ?: 9
+        if (match != null) {
+            val hours = match.groupValues[1].toIntOrNull()?.coerceIn(0, 23) ?: 9
+            val minutes = if (match.groupValues[2].isNotBlank()) {
+                match.groupValues[2].toIntOrNull()?.coerceIn(0, 59) ?: 0
+            } else {
+                0
+            }
+            return hours to minutes
         }
-        val minutes = if (match != null && match.groupValues[2].isNotBlank()) {
-            match.groupValues[2].toIntOrNull()?.coerceIn(0, 59) ?: 0
-        } else {
-            0
+
+        val digits = clean.filter { it.isDigit() }
+        return when {
+            digits.length >= 4 -> {
+                val h = digits.substring(0, 2).toIntOrNull()?.coerceIn(0, 23) ?: 9
+                val m = digits.substring(2, 4).toIntOrNull()?.coerceIn(0, 59) ?: 0
+                h to m
+            }
+            digits.length == 3 -> {
+                val h = digits.substring(0, 1).toIntOrNull()?.coerceIn(0, 23) ?: 9
+                val m = digits.substring(1, 3).toIntOrNull()?.coerceIn(0, 59) ?: 0
+                h to m
+            }
+            digits.isNotEmpty() -> {
+                val h = digits.toIntOrNull()?.coerceIn(0, 23) ?: 9
+                h to 0
+            }
+            else -> 9 to 0
         }
-        return hours to minutes
     }
 
-    fun computeNextReminderTriggerMillis(reminder: Reminder): Long {
+    fun computeNextReminderTriggerMillis(
+        reminder: Reminder,
+        skipCurrentMinute: Boolean = false
+    ): Long {
         val (hours, minutes) = parseHourMinute(reminder.time)
         val nowMillis = System.currentTimeMillis()
+        val todayDayOfWeek = Calendar.getInstance().get(Calendar.DAY_OF_WEEK)
 
         val calendar = Calendar.getInstance().apply {
             set(Calendar.HOUR_OF_DAY, hours)
             set(Calendar.MINUTE, minutes)
             set(Calendar.SECOND, 0)
             set(Calendar.MILLISECOND, 0)
-
-            val dayMap = mapOf(
-                "domingo" to Calendar.SUNDAY,
-                "segunda" to Calendar.MONDAY,
-                "terça" to Calendar.TUESDAY,
-                "terca" to Calendar.TUESDAY,
-                "quarta" to Calendar.WEDNESDAY,
-                "quinta" to Calendar.THURSDAY,
-                "sexta" to Calendar.FRIDAY,
-                "sábado" to Calendar.SATURDAY,
-                "sabado" to Calendar.SATURDAY
-            )
-
-            val targetDay = dayMap[reminder.dayOfWeek.trim().lowercase()]
-            if (targetDay != null) {
-                if (get(Calendar.DAY_OF_WEEK) != targetDay || timeInMillis <= nowMillis) {
-                    if (get(Calendar.DAY_OF_WEEK) == targetDay && timeInMillis <= nowMillis) {
-                        add(Calendar.DAY_OF_YEAR, 7)
-                    } else {
-                        while (get(Calendar.DAY_OF_WEEK) != targetDay) {
-                            add(Calendar.DAY_OF_YEAR, 1)
-                        }
-                    }
-                }
-            } else if (timeInMillis <= nowMillis) {
-                add(Calendar.DAY_OF_YEAR, 1)
-            }
         }
+
+        val dayMap = mapOf(
+            "domingo" to Calendar.SUNDAY,
+            "segunda" to Calendar.MONDAY,
+            "terça" to Calendar.TUESDAY,
+            "terca" to Calendar.TUESDAY,
+            "quarta" to Calendar.WEDNESDAY,
+            "quinta" to Calendar.THURSDAY,
+            "sexta" to Calendar.FRIDAY,
+            "sábado" to Calendar.SATURDAY,
+            "sabado" to Calendar.SATURDAY
+        )
+
+        val targetDay = dayMap[reminder.dayOfWeek.trim().lowercase()]
+        if (targetDay != null) {
+            if (targetDay == todayDayOfWeek) {
+                if (calendar.timeInMillis > nowMillis) {
+                    return calendar.timeInMillis
+                }
+                if (!skipCurrentMinute && (nowMillis - calendar.timeInMillis) < 60_000L) {
+                    return nowMillis + 3_000L
+                }
+                calendar.add(Calendar.DAY_OF_YEAR, 7)
+            } else {
+                while (calendar.get(Calendar.DAY_OF_WEEK) != targetDay) {
+                    calendar.add(Calendar.DAY_OF_YEAR, 1)
+                }
+            }
+        } else if (calendar.timeInMillis <= nowMillis) {
+            if (!skipCurrentMinute && (nowMillis - calendar.timeInMillis) < 60_000L) {
+                return nowMillis + 3_000L
+            }
+            calendar.add(Calendar.DAY_OF_YEAR, 1)
+        }
+
         return calendar.timeInMillis
     }
 
-    fun scheduleReminder(context: Context, reminder: Reminder) {
+    fun scheduleReminder(
+        context: Context,
+        reminder: Reminder,
+        skipCurrentMinute: Boolean = false
+    ) {
         val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
 
         val intent = Intent(context, ReminderReceiver::class.java).apply {
@@ -283,7 +316,7 @@ object AlarmScheduler {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
-        val triggerAtMillis = computeNextReminderTriggerMillis(reminder)
+        val triggerAtMillis = computeNextReminderTriggerMillis(reminder, skipCurrentMinute)
 
         // Usa setAlarmClock para acordar o aparelho exatamente no horário mesmo em Doze mode
         try {
